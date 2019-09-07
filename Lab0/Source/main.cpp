@@ -50,12 +50,13 @@ void my_quicksort(std::vector<int> &my_vec, int lo, int hi)
 
 int main(int argc, char* argv[]) 
 {
-
-	// --- Set up opts parser ---
 	cxxopts::Options options(argv[0], "Text parser for lab 1.");
 
+	std::string input, output;
+
 	options.add_options()
-		("n, name", "Name of input file", cxxopts::value<std::string>(), "FILE")
+		("n, name", "My name (for grading purposes)", cxxopts::value<bool>())
+		("i,input", "input file name", cxxopts::value<std::string>(), "FILE")
 		("o, output", "Output file name", cxxopts::value<std::string>(), "FILE")
 		("h, help", "Display help options")
 		;
@@ -66,19 +67,37 @@ int main(int argc, char* argv[])
 	try 
 	{
 		//Check which known opts were passed
+		options.parse_positional({ "input" });
 		auto result = options.parse(argc, argv);
+
+		if (result.count("help"))
+		{
+			std::cout << options.help({ "", "Group" }) << std::endl;
+			return 0;
+		}
+
+		if (result.count("name"))
+		{
+			std::cout << "Derek Prince" << std::endl;
+			return 0;
+		}
+
 		if (result.count("o"))
 		{
 			ofile = result["o"].as<std::string>();
-			std::cout << ofile << std::endl;
 		}
-		if (result.count("n"))
-		{
-			ifile = result["n"].as<std::string>();
+		else
+		{	// default name if none given
+			ofile = "output.txt";
 		}
-		if (result.count("help"))
+
+		if (result.count("i"))
 		{
-			std::cout << options.help({ "" }) << std::endl;
+			ifile = result["i"].as<std::string>();
+		}
+		else
+		{
+			std::cout << "No input file given" << std::endl;
 		}
 	}
 	// Catch unknown options and close nicely
