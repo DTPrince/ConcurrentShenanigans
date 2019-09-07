@@ -21,7 +21,7 @@ int partition(std::vector<int> &my_vec, int lo, int hi)
 	//pre-emptive decrement
 	int i = lo - 1;
 
-	// iterate over sub-array and swap 
+	// iterate over sub-array and swap if needed
 	for (int j = lo; j < hi; j++)
 	{
 		if (my_vec[j] < pivot) {
@@ -31,6 +31,13 @@ int partition(std::vector<int> &my_vec, int lo, int hi)
 	}
 	std::swap(my_vec[i + 1], my_vec[hi]);
 
+	// This partition function 'weighs' the vector to see how uneven or pre-sorted
+	// the array is. As i only increments when there is a swap, it is a semi-direct way of
+	// labeling how many times the array was swapped with respect to the highest location
+	// (which will be the highest number in the array after quicksort finishes)
+	// In other words, the highest position is supposed to be the highest number
+	// so if i is still -1 by the time it iterates over all of it then we know
+	// the upper location is already sorted and pi = 0
 	return (i + 1);
 }
 
@@ -131,13 +138,11 @@ int main(int argc, char* argv[])
 	else
 		std::cout << "File " << ifile << " did not open.";
 
-	// --- Sort data ---
-	for (std::vector<int>::const_iterator i = file_contents.begin(); i != file_contents.end(); i++) {
-		std::cout << *i << std::endl;
-	}
-	my_quicksort(file_contents, 0, file_contents.size() - 1);
+	// This is just in case the output file is the same as the input
+	infile.close();
 
-	std::cout << std::endl;
+	// --- Sort data ---
+	my_quicksort(file_contents, 0, file_contents.size() - 1);
 
 	for (std::vector<int>::const_iterator i = file_contents.begin(); i != file_contents.end(); i++) {
 		std::cout << *i << std::endl;
