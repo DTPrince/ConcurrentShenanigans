@@ -39,3 +39,6 @@ Debug/
 *.vcxproj.filters
 *.vcxproj.user
 
+# Test file ignore
+test.txt
+output.txt
