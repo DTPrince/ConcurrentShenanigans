@@ -7,15 +7,15 @@ OUTPUT = mysort
 
 vpath %.h ./Source/include
 vpath %.hpp ./Source/include
-vpath %.cpp ./Source
+vpath %.cpp ./Source/
 
 all : gcc
 
 gcc : $(OBJ)
 	$(CXX) $(CXXFLAGS) -o $(OUTPUT) $(OBJ)
 
-mysort.o : main.cpp cxxopts.hpp
-	$(CXX) $(CXXFLAGS) -c main.cpp
+mysort.o : mysort.cpp cxxopts.hpp
+	$(CXX) $(CXXFLAGS) -c Source/mysort.cpp
 
 #Nope.
 clang : $(OBJ)
