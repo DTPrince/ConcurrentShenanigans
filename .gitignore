@@ -33,7 +33,7 @@
 
 # Visual Studio
 .vs
-Lab0/Debug/*
+**/Debug/
 *.sln
 *.vcxproj
 *.vcxproj.filters
