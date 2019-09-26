@@ -20,15 +20,15 @@
 #define THREAD_INACTIVE true
 #define THREAD_ACTIVE false
 
-pthread_t* threads;
-size_t* no_threads;
-size_t NUM_THREADS;
-pthread_barrier_t bar;
+static pthread_t* threads;
+static size_t* no_threads;
+static size_t NUM_THREADS;
+static pthread_barrier_t bar;
 
-struct timespec start, end;
+//static struct timespec start, end;
 
 typedef struct{
-    std::vector<int> *vec;
+    std::vector<size_t> *vec;
     unsigned long lo, hi, tid;
 } thread_vec;
 
@@ -37,7 +37,7 @@ typedef struct {
     size_t no_active;
 } thread_status;
 
-thread_status t_status;
+static thread_status t_status;
 
 void global_init(){
     threads = static_cast<pthread_t*>(malloc(NUM_THREADS*sizeof(pthread_t)));
@@ -59,16 +59,17 @@ void global_cleanup(){
 
 
 // semi-intelligently find the partition index to divvy up the work load
-unsigned long partition(std::vector<int> &my_vec, unsigned long lo, unsigned long hi)
+unsigned long partition(std::vector<size_t> &my_vec, size_t lo, size_t hi)
 {
     // Median of 3 might be better for large data sets but rand modulus sounds expensive
-    unsigned long pivot = static_cast<unsigned long>(my_vec[(lo + hi) / 2]);  // TODO: verify compiler translates to binary shift
+//    unsigned long pivot = my_vec[static_cast<unsigned long>((lo + hi) / 2)];  // TODO: verify compiler translates to binary shift
+    unsigned long pivot = my_vec[hi];
 
 	//pre-emptive decrement
-	int i = lo - 1;
+    unsigned long i = lo - 1;
 
 	// iterate over sub-array and swap if needed
-	for (int j = lo; j < hi; j++)
+    for (unsigned long j = lo; j < hi; j++)
 	{
 		if (my_vec[j] < pivot) {
 			i++;
@@ -89,27 +90,27 @@ unsigned long partition(std::vector<int> &my_vec, unsigned long lo, unsigned lon
 	return (i + 1);
 }
 
-void my_quicksort(std::vector<int> &my_vec, unsigned long lo, unsigned long hi)
+void my_quicksort(std::vector<size_t> &my_vec, size_t lo, size_t hi)
 {
-	// exit condition
-	if (lo < hi)
-	{
-		// split array by oartitioning into two arrays, returning index (pi) of middle
+    // exit condition
+    if (lo < hi)
+    {
+        // split array by oartitioning into two arrays, returning index (pi) of middle
         unsigned long pi = partition(my_vec, lo, hi);
 
-        // Recursive call depends on whole array to be settled so there are no parallel gains by threading before this
-		my_quicksort(my_vec, lo, pi - 1);
-
-		my_quicksort(my_vec, pi + 1, hi);
-	}
+        // now that split has been found, quicksort the two partitions
+        my_quicksort(my_vec, lo, pi - 1);
+        my_quicksort(my_vec, pi + 1, hi);
+    }
 }
 
 // Threaded wrapper to set up my_quicksort() with all control variables nice and proper for multithreading
 // Master thread, essentially. Though this basically creates the binary tree of partial orders
 void *my_quicksort_thread(void *data){
     thread_vec *t_vec = static_cast<thread_vec *>(data);
-    // exit condition
+
     unsigned long thread_used[2] = {0, 0};
+    // exit condition
     if (t_vec->lo < t_vec->hi)
     {
         // split array by oartitioning into two arrays, returning index (pi) of middle
@@ -128,7 +129,8 @@ void *my_quicksort_thread(void *data){
                 t_vec_left->tid = t_vec->tid + 1;
                 thread_used[0] = t_vec_left->tid;
                 pthread_create(&threads[t_vec_left->tid], nullptr, &my_quicksort_thread, &t_vec_left);
-                my_quicksort_thread(t_vec_left);
+                t_status.status[thread_used[0]] = THREAD_ACTIVE;
+//                my_quicksort_thread(t_vec_left); // TODO: remove
             }
             else {
                 // find next unused
@@ -137,7 +139,7 @@ void *my_quicksort_thread(void *data){
                 size_t i = 1;
                 while(t_status.status[t_vec->tid + 1] == THREAD_ACTIVE){
                     i++;
-                    if (i = NUM_THREADS){
+                    if (i == NUM_THREADS){
                         // There are no free threads. Continue sequentially
                         // or loop, hoping for a free thread eventually I 'spose. Bit risky
                         thread_used[0] = 0; // indicate not used
@@ -151,7 +153,7 @@ void *my_quicksort_thread(void *data){
             size_t i = 1;
             while(t_status.status[t_vec->tid + 1] == THREAD_ACTIVE){
                 i++;
-                if (i = NUM_THREADS){
+                if (i == NUM_THREADS){
                     // Same deal
                     thread_used[0] = 0; // indicate not used
                     break;
@@ -171,7 +173,8 @@ void *my_quicksort_thread(void *data){
                 t_vec_right->tid = t_vec->tid + 1;
                 thread_used[0] = t_vec_right->tid;
                 pthread_create(&threads[t_vec_right->tid], nullptr, &my_quicksort_thread, &t_vec_right);
-                my_quicksort_thread(t_vec_right);
+                t_status.status[thread_used[1]] = THREAD_ACTIVE;
+//                my_quicksort_thread(t_vec_right); // TODO: remove
             }
             else {
                 // find next unused
@@ -180,7 +183,7 @@ void *my_quicksort_thread(void *data){
                 size_t i = 1;
                 while(t_status.status[t_vec->tid + 1] == THREAD_ACTIVE){
                     i++;
-                    if (i = NUM_THREADS){
+                    if (i == NUM_THREADS){
                         // There are no free threads. Continue sequentially
                         // or loop, hoping for a free thread eventually I 'spose. Bit risky
                         thread_used[1] = 0; // indicate not used
@@ -194,7 +197,7 @@ void *my_quicksort_thread(void *data){
             size_t i = 1;
             while(t_status.status[t_vec->tid + 1] == THREAD_ACTIVE){
                 i++;
-                if (i = NUM_THREADS){
+                if (i == NUM_THREADS){
                     // Same deal
                     thread_used[1] = 0; // indicate not used
                     break;
@@ -202,17 +205,30 @@ void *my_quicksort_thread(void *data){
             }
         }
 
+        // Feels like some real band-aid garbage. I dont want join to be called before the other thread has spawned though.
+        if (thread_used[0] > 0) {
+            pthread_create(&threads[t_vec_left->tid], nullptr, &my_quicksort_thread, &t_vec_left);
+            t_status.status[thread_used[0]] = THREAD_ACTIVE;
+        }
+        if (thread_used[1] > 0){
+            pthread_create(&threads[t_vec_right->tid], nullptr, &my_quicksort_thread, &t_vec_right);
+            t_status.status[thread_used[1]] = THREAD_ACTIVE;
+        }
 
 
         // joining here means the parent thread will not terminate until the children threads terminate
         // This is only significant when it comes to freeing threads on a heavily lopsided quicksort tree
-        if (thread_used[0] > 0)
+        if (thread_used[0] > 0){
             pthread_join(threads[thread_used[0]], &data);
+            t_status.status[thread_used[0]] = THREAD_INACTIVE;
+        }
         else
             // call sequential sort here to give the other branch a chance to start before getting held up by sequential
             my_quicksort(*t_vec_left->vec, t_vec_left->lo, t_vec_left->hi);
-        if (thread_used[1] > 0)
+        if (thread_used[1] > 0){
             pthread_join(threads[thread_used[1]], &data);
+            t_status.status[thread_used[1]] = THREAD_INACTIVE;
+        }
         else
             my_quicksort(*t_vec_right->vec, t_vec_right->lo, t_vec_right->hi);
     }
@@ -240,7 +256,7 @@ int main(int argc, char* argv[])
 	std::string ofile = "";
     std::string ifile = "";
     std::string algorithm = "";
-    bool algType = ALG_UNDEFINED;
+    size_t algType = ALG_UNDEFINED;
 
     // --- Opt parse block ---
 	try 
@@ -294,15 +310,15 @@ int main(int argc, char* argv[])
             }
         }
         else {
-            printf("No algorithm selected, exiting");
+            printf("No algorithm selected, exiting\n");
             return 0;
         }
 
         // Extract thread number information
-        if (result.count("t")){
-            NUM_THREADS = result["t"].as<int>();
+        if (result.count("threads")){
+            NUM_THREADS = result["t"].as<unsigned long>();
             if (NUM_THREADS > 150){
-                printf("Error: Too many threads");
+                printf("Error: Too many threads\n");
                 return(-1);
             }
         }
@@ -311,8 +327,9 @@ int main(int argc, char* argv[])
 	}
 	// Catch unknown options and close nicely
 	catch(std::exception& e) 
-	{
-		std::cout << e.what();
+    {
+        std::cout << e.what() << std::endl;
+        return -1;
 	}
     // -- END Opt parse block ---
 
@@ -320,7 +337,7 @@ int main(int argc, char* argv[])
 	// --- Gather file data ---
 	std::ifstream infile(ifile);
 
-	std::vector<int> file_contents;
+    std::vector<size_t> file_contents;
 
 	if (infile.is_open())
 	{
@@ -331,7 +348,7 @@ int main(int argc, char* argv[])
 			// Attempt to convert str to int, catch errors
 			try
 			{
-				file_contents.push_back(atoi(temp.c_str()));
+                file_contents.push_back(strtoul(temp.c_str(), nullptr, 0));
 			}
 			catch (std::exception& e)
 			{
@@ -357,33 +374,40 @@ int main(int argc, char* argv[])
         t_vec.hi = file_contents.size() - 1;
         t_vec.lo = 0;
         t_vec.tid = 0;
-        ret = pthread_create(&threads[0], NULL, &my_quicksort_thread, &t_vec);
-        if (ret){
-            printf("Error: in creating master thread %d\n", ret);
-            return -1;
+        if (NUM_THREADS == 1){  // Not parallel. Avoids checking in the parallel version every loop
+            my_quicksort(*t_vec.vec, t_vec.lo, t_vec.hi);
         }
-        // Join master
-        ret = pthread_join(threads[0], NULL);
-        if (ret){
-            printf("Error: in creating master thread %d\n", ret);
-            return -1;
+        else {
+            ret = pthread_create(&threads[0], nullptr, &my_quicksort_thread, &t_vec);
+            if (ret){
+                printf("Error: in creating master thread %d\n", ret);
+                return -1;
+            }
+            t_status.status[0] = THREAD_ACTIVE;
+            // Join master
+            ret = pthread_join(threads[0], nullptr);
+            if (ret){
+                printf("Error: in creating master thread %d\n", ret);
+                return -1;
+            }
+            t_status.status[0] = THREAD_INACTIVE;
+    //        my_quicksort_thread(&t_vec);
+            global_cleanup();
         }
-//        my_quicksort_thread(&t_vec);
-        global_cleanup();
         break;
 
     case BUCKET:
-        my_bucketsort();
+        //my_bucketsort();
         break;
     case ALG_UNDEFINED:
-        printf("This should have been set or returned before getting here");
+        printf("This should have been set or returned before getting here\n");
         return -1;
     default:
-        printf("How even");
+        printf("How even\n");
         return -1;
     }
 
-	for (std::vector<int>::const_iterator i = file_contents.begin(); i != file_contents.end(); i++) {
+    for (std::vector<size_t>::const_iterator i = file_contents.begin(); i != file_contents.end(); i++) {
 		std::cout << *i << std::endl;
 	}
 
@@ -394,7 +418,7 @@ int main(int argc, char* argv[])
 	{
 		try
 		{
-			for (std::vector<int>::const_iterator i = file_contents.begin(); i != file_contents.end(); i++)
+            for (std::vector<size_t>::const_iterator i = file_contents.begin(); i != file_contents.end(); i++)
 			{
 				outfile << *i << std::endl;
 			}
