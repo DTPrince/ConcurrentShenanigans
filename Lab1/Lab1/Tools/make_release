@@ -1,0 +1,15 @@
+!#/bin/bash
+# lil ghetto script
+# Run from project root
+make
+make clean
+rm -r ./Release/*
+cp ./Source/* ./Release/
+cp ./mysort ./Release/Source
+cp ./Makefile ./Release
+cp ./Readme.md ./Release
+
+# still need to add .md -> .pdf render
+# probably markdown-pdf from npm but PhantomJS hangs.
+
+# Also error/intelligent file checking but meh
