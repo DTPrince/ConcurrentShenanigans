@@ -42,7 +42,8 @@ int partition(std::vector<int> &my_vec, int lo, int hi)
 }
 
 void my_quicksort(std::vector<int> &my_vec, int lo, int hi) 
-{
+{	
+	std::cout << "Quicksort top.\n";
 	// exit condition
 	if (lo < hi)
 	{

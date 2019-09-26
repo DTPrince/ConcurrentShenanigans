@@ -21,30 +21,30 @@
 #define THREAD_ACTIVE false
 
 static pthread_t* threads;
-static size_t* no_threads;
-static size_t NUM_THREADS;
+static int* no_threads;
+static int NUM_THREADS;
 static pthread_barrier_t bar;
 
 //static struct timespec start, end;
 
 typedef struct{
-    std::vector<size_t> *vec;
-    unsigned long lo, hi, tid;
+    std::vector<int> *vec;
+    int lo, hi, tid;
 } thread_vec;
 
 typedef struct {
-    size_t* status;
-    size_t no_active;
+    int* status;
+    int no_active;
 } thread_status;
 
 static thread_status t_status;
 
 void global_init(){
     threads = static_cast<pthread_t*>(malloc(NUM_THREADS*sizeof(pthread_t)));
-    no_threads = static_cast<size_t*>(malloc(NUM_THREADS*sizeof(size_t)));
-    t_status.status = static_cast<size_t*>(malloc(NUM_THREADS*sizeof(size_t)));
+    no_threads = static_cast<int*>(malloc(NUM_THREADS*sizeof(int)));
+    t_status.status = static_cast<int*>(malloc(NUM_THREADS*sizeof(int)));
 
-    for (size_t i = 0; i < NUM_THREADS; i++)
+    for (int i = 0; i < NUM_THREADS; i++)
         t_status.status[i] = THREAD_INACTIVE;
     t_status.no_active = 0;
 
@@ -59,17 +59,17 @@ void global_cleanup(){
 
 
 // semi-intelligently find the partition index to divvy up the work load
-unsigned long partition(std::vector<size_t> &my_vec, size_t lo, size_t hi)
+int partition(std::vector<int> &my_vec, int lo, int hi)
 {
     // Median of 3 might be better for large data sets but rand modulus sounds expensive
-//    unsigned long pivot = my_vec[static_cast<unsigned long>((lo + hi) / 2)];  // TODO: verify compiler translates to binary shift
-    unsigned long pivot = my_vec[hi];
+//    int pivot = my_vec[static_cast<int>((lo + hi) / 2)];  // TODO: verify compiler translates to binary shift
+    int pivot = my_vec[hi];
 
 	//pre-emptive decrement
-    unsigned long i = lo - 1;
+    int i = lo - 1;
 
 	// iterate over sub-array and swap if needed
-    for (unsigned long j = lo; j < hi; j++)
+    for (int j = lo; j < hi; j++)
 	{
 		if (my_vec[j] < pivot) {
 			i++;
@@ -90,13 +90,13 @@ unsigned long partition(std::vector<size_t> &my_vec, size_t lo, size_t hi)
 	return (i + 1);
 }
 
-void my_quicksort(std::vector<size_t> &my_vec, size_t lo, size_t hi)
+void my_quicksort(std::vector<int> &my_vec, int lo, int hi)
 {
     // exit condition
     if (lo < hi)
     {
         // split array by oartitioning into two arrays, returning index (pi) of middle
-        unsigned long pi = partition(my_vec, lo, hi);
+        int pi = partition(my_vec, lo, hi);
 
         // now that split has been found, quicksort the two partitions
         my_quicksort(my_vec, lo, pi - 1);
@@ -108,13 +108,14 @@ void my_quicksort(std::vector<size_t> &my_vec, size_t lo, size_t hi)
 // Master thread, essentially. Though this basically creates the binary tree of partial orders
 void *my_quicksort_thread(void *data){
     thread_vec *t_vec = static_cast<thread_vec *>(data);
+    std::cout << "Parallel quicksort entered. tid: " << t_vec->tid << std::endl;
 
-    unsigned long thread_used[2] = {0, 0};
+    int thread_used[2] = {0, 0};
     // exit condition
     if (t_vec->lo < t_vec->hi)
     {
         // split array by oartitioning into two arrays, returning index (pi) of middle
-        unsigned long pi = partition(*t_vec->vec, t_vec->lo, t_vec->hi);
+        int pi = partition(*t_vec->vec, t_vec->lo, t_vec->hi);
 
         // Recursive call depends on whole array to be settled so there are no parallel gains by threading before this
         // not *particularly* happy about allocating in the recursive call and then setting up t_vec but... oh well.
@@ -136,7 +137,7 @@ void *my_quicksort_thread(void *data){
                 // find next unused
                 // Starting at 1 becasue the master (0) will always be in use because of the double join at the end of my_quicksort_thread
                 // Tehre are many other starting options but they all get complicated quickly since threads can free on the other side of the tree
-                size_t i = 1;
+                int i = 1;
                 while(t_status.status[t_vec->tid + 1] == THREAD_ACTIVE){
                     i++;
                     if (i == NUM_THREADS){
@@ -150,7 +151,7 @@ void *my_quicksort_thread(void *data){
         }
         else {
             // Else start at the beginning and try to find a free thread
-            size_t i = 1;
+            int i = 1;
             while(t_status.status[t_vec->tid + 1] == THREAD_ACTIVE){
                 i++;
                 if (i == NUM_THREADS){
@@ -180,7 +181,7 @@ void *my_quicksort_thread(void *data){
                 // find next unused
                 // Starting at 1 becasue the master (0) will always be in use because of the double join at the end of my_quicksort_thread
                 // Tehre are many other starting options but they all get complicated quickly since threads can free on the other side of the tree
-                size_t i = 1;
+                int i = 1;
                 while(t_status.status[t_vec->tid + 1] == THREAD_ACTIVE){
                     i++;
                     if (i == NUM_THREADS){
@@ -194,7 +195,7 @@ void *my_quicksort_thread(void *data){
         }
         else {
             // Else start at the beginning and try to find a free thread
-            size_t i = 1;
+            int i = 1;
             while(t_status.status[t_vec->tid + 1] == THREAD_ACTIVE){
                 i++;
                 if (i == NUM_THREADS){
@@ -207,10 +208,12 @@ void *my_quicksort_thread(void *data){
 
         // Feels like some real band-aid garbage. I dont want join to be called before the other thread has spawned though.
         if (thread_used[0] > 0) {
+            t_vec_left->tid = thread_used[0];
             pthread_create(&threads[t_vec_left->tid], nullptr, &my_quicksort_thread, &t_vec_left);
             t_status.status[thread_used[0]] = THREAD_ACTIVE;
         }
         if (thread_used[1] > 0){
+            t_vec_left->tid = thread_used[1];
             pthread_create(&threads[t_vec_right->tid], nullptr, &my_quicksort_thread, &t_vec_right);
             t_status.status[thread_used[1]] = THREAD_ACTIVE;
         }
@@ -248,7 +251,7 @@ int main(int argc, char* argv[])
 		("n, name", "My name (for grading purposes)", cxxopts::value<bool>())
 		("i,input", "input file name", cxxopts::value<std::string>(), "FILE")
 		("o, output", "Output file name", cxxopts::value<std::string>(), "FILE")
-        ("t, threads", "Number of threads to be used", cxxopts::value<size_t>())
+        ("t, threads", "Number of threads to be used", cxxopts::value<int>())
         ("alg", "Algorithm to sort with", cxxopts::value<std::string>())
 		("h, help", "Display help options")
 		;
@@ -256,7 +259,7 @@ int main(int argc, char* argv[])
 	std::string ofile = "";
     std::string ifile = "";
     std::string algorithm = "";
-    size_t algType = ALG_UNDEFINED;
+    int algType = ALG_UNDEFINED;
 
     // --- Opt parse block ---
 	try 
@@ -316,7 +319,7 @@ int main(int argc, char* argv[])
 
         // Extract thread number information
         if (result.count("threads")){
-            NUM_THREADS = result["t"].as<unsigned long>();
+            NUM_THREADS = result["t"].as<int>();
             if (NUM_THREADS > 150){
                 printf("Error: Too many threads\n");
                 return(-1);
@@ -337,7 +340,7 @@ int main(int argc, char* argv[])
 	// --- Gather file data ---
 	std::ifstream infile(ifile);
 
-    std::vector<size_t> file_contents;
+    std::vector<int> file_contents;
 
 	if (infile.is_open())
 	{
@@ -348,7 +351,7 @@ int main(int argc, char* argv[])
 			// Attempt to convert str to int, catch errors
 			try
 			{
-                file_contents.push_back(strtoul(temp.c_str(), nullptr, 0));
+                file_contents.push_back(atoi(temp.c_str()));
 			}
 			catch (std::exception& e)
 			{
@@ -407,7 +410,7 @@ int main(int argc, char* argv[])
         return -1;
     }
 
-    for (std::vector<size_t>::const_iterator i = file_contents.begin(); i != file_contents.end(); i++) {
+    for (std::vector<int>::const_iterator i = file_contents.begin(); i != file_contents.end(); i++) {
 		std::cout << *i << std::endl;
 	}
 
@@ -418,7 +421,7 @@ int main(int argc, char* argv[])
 	{
 		try
 		{
-            for (std::vector<size_t>::const_iterator i = file_contents.begin(); i != file_contents.end(); i++)
+            for (std::vector<int>::const_iterator i = file_contents.begin(); i != file_contents.end(); i++)
 			{
 				outfile << *i << std::endl;
 			}
