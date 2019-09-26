@@ -11,11 +11,13 @@ pthread_barrier_t bar;
 
 struct timespec start, end;
 
+// Global to avoid passing thread references all over the place
 void global_init(){
     threads = malloc(NUM_THREADS*sizeof(pthread_t));
     args = malloc(NUM_THREADS*sizeof(size_t));
     pthread_barrier_init(&bar, NULL, NUM_THREADS);
 }
+
 void global_cleanup(){
     free(threads);
     free(args);
@@ -47,8 +49,7 @@ void* thread_main(void* args){
 }
 
 
-
-
+// === MAIN ===
 int main(int argc, const char* argv[]){
 
     // parse args
