@@ -107,9 +107,9 @@ void my_quicksort(std::vector<int> &my_vec, unsigned long lo, unsigned long hi)
 // Threaded wrapper to set up my_quicksort() with all control variables nice and proper for multithreading
 // Master thread, essentially. Though this basically creates the binary tree of partial orders
 void *my_quicksort_thread(void *data){
-    thread_vec *t_vec = (thread_vec *)data;
+    thread_vec *t_vec = static_cast<thread_vec *>(data);
     // exit condition
-    unsigned long thread_used[2];
+    unsigned long thread_used[2] = {0, 0};
     if (t_vec->lo < t_vec->hi)
     {
         // split array by oartitioning into two arrays, returning index (pi) of middle
@@ -122,34 +122,100 @@ void *my_quicksort_thread(void *data){
         t_vec_left->lo = t_vec->lo;
         t_vec_left->hi = pi - 1;
 
-        if (t_vec->tid != NUM_THREADS - 1){ // If current thread master is not last allocated, check next thread
+        // Hideous block used to find an idle thread. This should really be managed in a quasi-scheduler
+        if (t_vec->tid + 1 < NUM_THREADS){ // Basically and out-of-range segfault check.
             if (t_status.status[t_vec->tid + 1] == THREAD_INACTIVE){ //Check if next thread is available
-                t_vec_left->tid = t_vec->tid+1;
+                t_vec_left->tid = t_vec->tid + 1;
+                thread_used[0] = t_vec_left->tid;
                 pthread_create(&threads[t_vec_left->tid], nullptr, &my_quicksort_thread, &t_vec_left);
                 my_quicksort_thread(t_vec_left);
             }
-            else {  // find next unused
-
+            else {
+                // find next unused
+                // Starting at 1 becasue the master (0) will always be in use because of the double join at the end of my_quicksort_thread
+                // Tehre are many other starting options but they all get complicated quickly since threads can free on the other side of the tree
+                size_t i = 1;
+                while(t_status.status[t_vec->tid + 1] == THREAD_ACTIVE){
+                    i++;
+                    if (i = NUM_THREADS){
+                        // There are no free threads. Continue sequentially
+                        // or loop, hoping for a free thread eventually I 'spose. Bit risky
+                        thread_used[0] = 0; // indicate not used
+                        break;
+                    }
+                }
             }
         }
         else {
-            //if the next thread is active then that likely means
+            // Else start at the beginning and try to find a free thread
+            size_t i = 1;
+            while(t_status.status[t_vec->tid + 1] == THREAD_ACTIVE){
+                i++;
+                if (i = NUM_THREADS){
+                    // Same deal
+                    thread_used[0] = 0; // indicate not used
+                    break;
+                }
+            }
         }
 
 
-
+        // Copy of left determine but applied to right side.
         thread_vec *t_vec_right = new thread_vec;
         t_vec_right->vec = t_vec->vec;        // TODO: double check this does indeed modify as expected (single vector object for program in main())
         t_vec_right->lo = pi + 1;
         t_vec_right->hi = t_vec->hi;
-        my_quicksort_thread(t_vec_right);
 
-        thread_used[0] = t_vec_left->tid;
-        thread_used[1] = t_vec_right->tid;
+        if (t_vec->tid + 1 < NUM_THREADS){ // Basically and out-of-range segfault check.
+            if (t_status.status[t_vec->tid + 1] == THREAD_INACTIVE){ //Check if next thread is available
+                t_vec_right->tid = t_vec->tid + 1;
+                thread_used[0] = t_vec_right->tid;
+                pthread_create(&threads[t_vec_right->tid], nullptr, &my_quicksort_thread, &t_vec_right);
+                my_quicksort_thread(t_vec_right);
+            }
+            else {
+                // find next unused
+                // Starting at 1 becasue the master (0) will always be in use because of the double join at the end of my_quicksort_thread
+                // Tehre are many other starting options but they all get complicated quickly since threads can free on the other side of the tree
+                size_t i = 1;
+                while(t_status.status[t_vec->tid + 1] == THREAD_ACTIVE){
+                    i++;
+                    if (i = NUM_THREADS){
+                        // There are no free threads. Continue sequentially
+                        // or loop, hoping for a free thread eventually I 'spose. Bit risky
+                        thread_used[1] = 0; // indicate not used
+                        break;
+                    }
+                }
+            }
+        }
+        else {
+            // Else start at the beginning and try to find a free thread
+            size_t i = 1;
+            while(t_status.status[t_vec->tid + 1] == THREAD_ACTIVE){
+                i++;
+                if (i = NUM_THREADS){
+                    // Same deal
+                    thread_used[1] = 0; // indicate not used
+                    break;
+                }
+            }
+        }
+
+
+
+        // joining here means the parent thread will not terminate until the children threads terminate
+        // This is only significant when it comes to freeing threads on a heavily lopsided quicksort tree
+        if (thread_used[0] > 0)
+            pthread_join(threads[thread_used[0]], &data);
+        else
+            // call sequential sort here to give the other branch a chance to start before getting held up by sequential
+            my_quicksort(*t_vec_left->vec, t_vec_left->lo, t_vec_left->hi);
+        if (thread_used[1] > 0)
+            pthread_join(threads[thread_used[1]], &data);
+        else
+            my_quicksort(*t_vec_right->vec, t_vec_right->lo, t_vec_right->hi);
     }
-    // TODO: not conviced this actually works. Technically there is no world in which both sides of data->vec is modified at the same time...
-    pthread_join(threads[thread_used[0]], &data);
-    pthread_join(threads[thread_used[1]], &data);
 
     pthread_exit(nullptr);
 }
@@ -290,7 +356,7 @@ int main(int argc, char* argv[])
         t_vec.vec = &file_contents;
         t_vec.hi = file_contents.size() - 1;
         t_vec.lo = 0;
-        t_vec.tid = 1;
+        t_vec.tid = 0;
         ret = pthread_create(&threads[0], NULL, &my_quicksort_thread, &t_vec);
         if (ret){
             printf("Error: in creating master thread %d\n", ret);
