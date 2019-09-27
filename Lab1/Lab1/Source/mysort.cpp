@@ -19,14 +19,17 @@
 
 #define THREAD_INACTIVE true
 #define THREAD_ACTIVE false
-#define LIST_SZ_LIMIT 1
+// Played with this number a bit but it'll depend on the machine so I'm not too woried about the +/-
+#define LIST_SZ_LIMIT 12
 
 static pthread_t* threads;
 static int* no_threads;
 static int NUM_THREADS;
-//static pthread_barrier_t bar;
+static struct timespec start, end;
 
-//static struct timespec start, end;
+// 10 ave -> 207.16
+// 11 ave -> 197.6
+// 12 ave -> 171
 
 typedef struct{
     std::vector<int> *vec;
@@ -43,26 +46,16 @@ static thread_status t_status;
 void global_init(){
     threads = static_cast<pthread_t*>(malloc(NUM_THREADS*sizeof(pthread_t)));
     no_threads = static_cast<int*>(malloc(NUM_THREADS*sizeof(int)));
-    t_status.status = static_cast<int*>(malloc(NUM_THREADS*sizeof(int)));
-
-//    for (int i = 0; i < NUM_THREADS; i++)
-//        t_status.status[i] = THREAD_INACTIVE;
-//    t_status.no_active = 0;
-
-//    pthread_barrier_init(&bar, nullptr, NUM_THREADS);
 }
 void global_cleanup(){
     free(threads);
     free(no_threads);
-    free(t_status.status);
-//    pthread_barrier_destroy(&bar);
 }
 
 // semi-intelligently find the partition index to divvy up the work load
 int partition(std::vector<int> &my_vec, int lo, int hi)
 {
     // Median of 3 might be better for large data sets but rand modulus sounds expensive
-//    int pivot = my_vec[static_cast<int>((lo + hi) / 2)];  // TODO: verify compiler translates to binary shift
     int pivot = my_vec[hi];
 
 	//pre-emptive decrement
@@ -127,6 +120,9 @@ void my_insertionsort(std::vector<int> &vec, int sz){
 void *pqsort(void* arg){
     // Master/managing thread
     thread_vec *t_vec = static_cast<thread_vec *>(arg);
+    if(t_vec->tid==0){
+        clock_gettime(CLOCK_MONOTONIC,&start);
+    }
 
     if(t_vec->lo < t_vec->hi)
     {
@@ -165,7 +161,9 @@ void *pqsort(void* arg){
             }
         }
     }
-
+    if(t_vec->tid==0){
+        clock_gettime(CLOCK_MONOTONIC,&end);
+    }
     pthread_exit(nullptr);
 }
 
@@ -308,7 +306,16 @@ int main(int argc, char* argv[])
         t_vec.lo = 0;
         t_vec.tid = 0;
         if (NUM_THREADS == 1){  // Not parallel. Avoids checking in the parallel version every loop
-            my_quicksort(*t_vec.vec, t_vec.lo, t_vec.hi);
+            if (t_vec.vec->size() > LIST_SZ_LIMIT){
+                clock_gettime(CLOCK_MONOTONIC,&start);
+                my_insertionsort(*t_vec.vec, t_vec.vec->size());
+                clock_gettime(CLOCK_MONOTONIC,&end);
+            }
+            else {
+                clock_gettime(CLOCK_MONOTONIC,&start);
+                my_quicksort(*t_vec.vec, t_vec.lo, t_vec.hi);
+                clock_gettime(CLOCK_MONOTONIC,&end);
+            }
         }
         else {
             ret = pthread_create(&threads[0], nullptr, &pqsort, &t_vec);
@@ -322,7 +329,6 @@ int main(int argc, char* argv[])
                 printf("Error: in creating master thread %d\n", ret);
                 return -1;
             }
-
             global_cleanup();
         }
         break;
@@ -338,9 +344,17 @@ int main(int argc, char* argv[])
         return -1;
     }
 
-    for (std::vector<int>::const_iterator i = file_contents.begin(); i != file_contents.end(); i++) {
-		std::cout << *i << std::endl;
-	}
+    // Print sorted list
+//    for (std::vector<int>::const_iterator i = file_contents.begin(); i != file_contents.end(); i++) {
+//		std::cout << *i << std::endl;
+//	}
+
+    // Print time
+    unsigned long long elapsed_ns;
+    elapsed_ns = (end.tv_sec-start.tv_sec)*1000000000 + (end.tv_nsec-start.tv_nsec);
+    printf("Elapsed (ns): %llu\n",elapsed_ns);
+    double elapsed_s = ((double)elapsed_ns)/1000000000.0;
+    printf("Elapsed (s): %lf\n",elapsed_s);
 
 	// --- Write data ---
 	std::ofstream outfile(ofile);

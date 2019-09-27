@@ -19,37 +19,42 @@ void global_init(){
 
 }
 
+typedef struct{
+    int tid;
+    int data;
+} t_struct;
+
 void global_cleanup(){
     free(threads);
     free(args);
     pthread_barrier_destroy(&bar);
 }
 
-//void *recursivefn(void* tid){
-//    int *thread_id;
-//    thread_id = (int*)tid;
-//    std::cout << "In thread: " << thread_id << std::endl;
+void *recursivefn(void* tid){
+    int *thread_id;
+    thread_id = (int*)tid;
+    std::cout << "In thread: " << thread_id << std::endl;
 
-//    pthread_exit(nullptr);
-//}
-
-// Should not work
-void* test_plaunchfn(void* args){
-    int *t = (int*)args;
-    std::cout << "In plaunchfn. t: " << *t << std::endl;
-    if (*t > 1){
-        *t--;
-        int temp = *t;
-        test_plaunchfn(&temp);
-    }
     pthread_exit(nullptr);
 }
 
-void test_launchfn(int t){
-    std::cout << "testlaunch fn.\n";
+// Should not work
+//void* test_plaunchfn(void* args){
+//    int *t = (int*)args;
+//    std::cout << "In plaunchfn. t: " << *t << std::endl;
+//    if (*t > 1){
+//        *t--;
+//        int temp = *t;
+//        test_plaunchfn(&temp);
+//    }
+//    pthread_exit(nullptr);
+//}
 
-    test_plaunchfn((void*)t);
-}
+//void test_launchfn(int t){
+//    std::cout << "testlaunch fn.\n";
+
+//    test_plaunchfn((void*)t);
+//}
 
 
 int main()
@@ -59,8 +64,9 @@ int main()
     global_init();
     for (int i = 0; i < NUM_THREADS; i++){
         std::cout << "Creating thread: " << i << std::endl;
-        pthread_create(&threads[i], nullptr, test_plaunchfn, (void*)i);
+        pthread_create(&threads[i], nullptr, recursivefn, (void*)i);
     }
+
     for (int i = 0; i < NUM_THREADS; i++){
         std::cout << "Joining thread: " << i << std::endl;
         pthread_join(threads[i], nullptr);
