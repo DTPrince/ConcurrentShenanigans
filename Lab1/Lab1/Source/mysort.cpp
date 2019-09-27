@@ -57,7 +57,6 @@ void global_cleanup(){
     pthread_barrier_destroy(&bar);
 }
 
-
 // semi-intelligently find the partition index to divvy up the work load
 int partition(std::vector<int> &my_vec, int lo, int hi)
 {
@@ -103,6 +102,18 @@ void my_quicksort(std::vector<int> &my_vec, int lo, int hi)
         my_quicksort(my_vec, pi + 1, hi);
     }
 }
+
+//only spawn one new thread. There is no reason to spawn 2 as the main thread will be idle anyhow
+// Dont make new threads once the list becomes small enough. It has too much overhead
+void* pqsort_launch(void* arg){
+
+
+
+    // probably return arg
+    pthread_exit(nullptr);
+}
+
+
 
 // Threaded wrapper to set up my_quicksort() with all control variables nice and proper for multithreading
 // Master thread, essentially. Though this basically creates the binary tree of partial orders
