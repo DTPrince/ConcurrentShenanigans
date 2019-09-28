@@ -1,2 +1,2 @@
 !#/bin/bash
-valgrind --tool=drd --read-var-info=yes --free-is-write=yes ./mysort test.txt --alg=fj t 100
+valgrind --tool=drd --read-var-info=yes --free-is-write=yes ./mysort test.txt --alg=bucket -t 100

@@ -11,3 +11,6 @@ SOURCES += \
 
 HEADERS += \
     Source/include/cxxopts.hpp
+
+DISTFILES += \
+    Readme.md
