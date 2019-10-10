@@ -82,9 +82,9 @@ Letters as fas as has been tested are ignored and removed from the input. See ex
 * source/include/cxxopts.hpp - CLI argument parser library
 
 #### Credits
-[cxxopts](https://github.com/jarro2783/cxxopts) for command line parsing because nobody but C++ needs to solve this issue again.
-[Clang Format](https://clang.llvm.org/docs/ClangFormat.html) for cleaning my erratic coding styling.
-[Dillinger.io](https://dillinger.io/) for the pretty markdown while the npm and pip world failed me.
+* [cxxopts](https://github.com/jarro2783/cxxopts) for command line parsing because nobody but C++ needs to solve this issue again.
+* [Clang Format](https://clang.llvm.org/docs/ClangFormat.html) for cleaning my erratic coding styling.
+* [Dillinger.io](https://dillinger.io/) for the pretty markdown while the npm and pip world failed me.
 
 
 #### Extant Bugs
