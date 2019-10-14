@@ -215,15 +215,19 @@ void *pbucket_insert_task(void *args) {
   //    int k = t_vec->vec->size();  // determined by the size of .reserve() in
   //    main() while setting up master thread
 
-  int idex = 0;
+//  int idex = 0;
   pthread_mutex_lock(&locks[0]);
-  for (int i = t_vec->lo; i < t_vec->hi; i++) {
-    //        idex = (k * (*t_vec->vec)[i] / m);
-    //        pthread_mutex_lock(&locks[idex]);
+//  for (int i = t_vec->lo; i < t_vec->hi; i++) {
+//    //        idex = (k * (*t_vec->vec)[i] / m);
+//    //        pthread_mutex_lock(&locks[idex]);
 
-    t_vec->buckets->insert((*t_vec->vec)[idex]);
-    //        pthread_mutex_unlock(&locks[idex]);
-  }
+//    t_vec->buckets->insert((*t_vec->vec)[idex]);
+
+//    //        pthread_mutex_unlock(&locks[idex]);
+//  }
+
+  std::vector<int>::iterator it = t_vec->vec->begin();
+  t_vec->buckets->insert(it + t_vec->lo, it + t_vec->hi);
   pthread_mutex_unlock(&locks[0]);
   pthread_exit(nullptr);
 }
@@ -236,16 +240,19 @@ void *pbucketsort(void *args) {
   // --- setup ---
   //    int m = *std::max_element(t_vec->vec->begin(), t_vec->vec->end());
 
-  // Now there are two scenarios going forward
-  // #1 - we use all allocated threads and they have greater than or equal to
-  // minimum MIN_ELEMENTS_PER_THREAD each #2 - we use fewer threads than
-  // allocated (because its faster) and each thread is responsible for
-  // MIN_ELEMENTS_PER_THREAD After spinning off the threads this master thread
-  // will be idle so it will always take the remainder elements. Thus each
-  // thread should have approximately the same execution time and none should be
-  // faster than Master. (though all dependent on lock contention)
+  /*
+   * Now there are two scenarios going forward
+   * #1 - we use all allocated threads and they have greater than or equal to
+   * minimum MIN_ELEMENTS_PER_THREAD each
+   * #2 - we use fewer threads than
+   * allocated (because its faster) and each thread is responsible for
+   * MIN_ELEMENTS_PER_THREAD After spinning off the threads this master thread
+   * will be idle so it will always take the remainder elements. Thus each
+   * thread should have approximately the same execution time and none should be
+   * faster than Master. (though all dependent on lock contention)
+  */
 
-  int sz = t_vec->vec->size() - 1;
+  int sz = t_vec->vec->size();
 
   int tid = 1;
   int elements_perthread;
@@ -270,7 +277,7 @@ void *pbucketsort(void *args) {
     t_bvec.buckets = t_vec->buckets;
 
     t_bvec.lo = ctrl;
-    t_bvec.hi = ctrl + elements_perthread - 1;
+    t_bvec.hi = ctrl + elements_perthread;
 
     t_bvec.tid = tid;
 
@@ -287,13 +294,17 @@ void *pbucketsort(void *args) {
   t_vec->lo = ctrl;
   t_vec->hi = sz;
   pthread_mutex_lock(&locks[0]);
-  for (int i = t_vec->lo; i < t_vec->hi; i++) {
-    //        idex = (sz * (*t_vec->vec)[i] / m);
+//  for (int i = t_vec->lo; i < t_vec->hi; i++) {
+//    //        idex = (sz * (*t_vec->vec)[i] / m);
 
-    //        pthread_mutex_lock(&locks[idex]);
-    t_vec->buckets->insert((*t_vec->vec)[i]);
-    //        pthread_mutex_unlock(&locks[idex]);
-  }
+//    //        pthread_mutex_lock(&locks[idex]);
+//    t_vec->buckets->insert((*t_vec->vec)[i]);
+//    //        pthread_mutex_unlock(&locks[idex]);
+//  }
+
+  std::vector<int>::iterator it = t_vec->vec->begin();
+  t_vec->buckets->insert(it + t_vec->lo, it + t_vec->hi);
+
   pthread_mutex_unlock(&locks[0]);
 
   for (int i = 1; i < tid; i++) {
@@ -309,13 +320,15 @@ int main(int argc, char *argv[]) {
 
   std::string input, output;
 
-  options.add_options()("n, name", "My name (for grading purposes)",
-                        cxxopts::value<bool>())(
+  options.add_options()(
+      "n, name", "My name (for grading purposes)", cxxopts::value<bool>())(
       "i,input", "input file name", cxxopts::value<std::string>(), "FILE")(
       "o, output", "Output file name", cxxopts::value<std::string>(), "FILE")(
       "t, threads", "Number of threads to be used", cxxopts::value<int>())(
-      "alg", "Algorithm to sort with",
-      cxxopts::value<std::string>())("h, help", "Display help options");
+      "b, bar", "Barrier type to use", cxxopts::value<std::string>())(
+      "l, lock", "Lock type to use", cxxopts::value<std::string>())(
+      "alg", "Algorithm to sort with",cxxopts::value<std::string>())(
+      "h, help", "Display help options");
 
   std::string ofile = "";
   std::string ifile = "";
@@ -401,12 +414,18 @@ int main(int argc, char *argv[]) {
         std::cout << e.what();
       }
     }
-  } else
-    std::cout << "File " << ifile << " did not open.";
-
+  } else {
+    std::cout << "File " << ifile << " did not open.\n";
+    return 0;
+  }
   // This is just in case the output file is the same as the input
   infile.close();
   // --- END Gather file data ---
+
+  for (std::vector<int>::const_iterator i = file_contents.begin(); i != file_contents.end(); i++) {
+      std::cout << *i << std::endl;
+  }
+
 
   std::vector<int> file_print;
 
