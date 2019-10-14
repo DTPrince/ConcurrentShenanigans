@@ -1,0 +1,2 @@
+!#/bin/bash
+valgrind --tool=drd --trace-barrier=yes --read-var-info=yes ./mysort test.txt --alg=fj

@@ -1,0 +1,2 @@
+!#/bin/bash
+valgrind --tool=drd --exclusive-threshold=10 ./mysort test.txt --alg=fj
