@@ -11,6 +11,7 @@
 #include <string>
 
 #include "include/cxxopts.hpp"
+#include "include/locks.hpp"
 
 #define FORK_JOIN 1
 #define BUCKET 0
