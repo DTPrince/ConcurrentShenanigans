@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <pthread.h>
+#include <atomic>
 #include <set> // multiset support
 #include <string>
 
@@ -294,14 +295,8 @@ void *pbucketsort(void *args) {
   t_vec->lo = ctrl;
   t_vec->hi = sz;
   pthread_mutex_lock(&locks[0]);
-//  for (int i = t_vec->lo; i < t_vec->hi; i++) {
-//    //        idex = (sz * (*t_vec->vec)[i] / m);
 
-//    //        pthread_mutex_lock(&locks[idex]);
-//    t_vec->buckets->insert((*t_vec->vec)[i]);
-//    //        pthread_mutex_unlock(&locks[idex]);
-//  }
-
+  // Insert a range of memory. According to docs its faster (and I dont have to for loop it)
   std::vector<int>::iterator it = t_vec->vec->begin();
   t_vec->buckets->insert(it + t_vec->lo, it + t_vec->hi);
 
@@ -422,11 +417,6 @@ int main(int argc, char *argv[]) {
   infile.close();
   // --- END Gather file data ---
 
-  for (std::vector<int>::const_iterator i = file_contents.begin(); i != file_contents.end(); i++) {
-      std::cout << *i << std::endl;
-  }
-
-
   std::vector<int> file_print;
 
   // --- Sort data ---
@@ -525,12 +515,6 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   }
-
-  //     // Print sorted list
-  //    for (std::vector<int>::const_iterator i = file_print.begin(); i !=
-  //    file_print.end(); i++) {
-  //        std::cout << *i << std::endl;
-  //    }
 
   // Print time
   unsigned long long elapsed_ns;
