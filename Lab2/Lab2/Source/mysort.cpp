@@ -1,18 +1,19 @@
 // Derek Prince
 // ECEN - 5033 Concurrent Programming
-// Lab 1 - Concurrent Text Sort with Quicksort and Bucketsort
-// Due 9/25/19
+// Lab 2 - Various Locks and Barriers used on Bucketsrot
+// Due 10/16/19
 
 #include <exception>
 #include <fstream>
 #include <iostream>
 #include <pthread.h>
 #include <atomic>
-#include <set> // multiset support
+#include <set>
 #include <string>
 
 #include "include/cxxopts.hpp"
 #include "include/locks.hpp"
+#include "include/barriers.hpp"
 
 #define FORK_JOIN 1
 #define BUCKET 0
@@ -30,16 +31,14 @@
 #define MIN_ELEMENTS_PER_THREAD 10
 
 static pthread_t *threads;
-static pthread_mutex_t *locks;
 static int *no_threads;
 static int NUM_THREADS = 0;
 static struct timespec start, end;
 
-static std::multiset<int> *landfill = nullptr;
+LockBox *lockBox = nullptr;
+LockType ltype = LOCK_TYPE_INVALID;
 
-// 10 ave -> 207.16
-// 11 ave -> 197.6
-// 12 ave -> 171
+static std::multiset<int> *landfill = nullptr;
 
 typedef struct {
   std::vector<int> *vec;
@@ -52,11 +51,6 @@ typedef struct {
   int lo, hi, tid;
 } thread_bvec;
 
-typedef struct {
-  int *status;
-  int no_active;
-} thread_status;
-
 void global_init() {
   threads = static_cast<pthread_t *>(malloc(NUM_THREADS * sizeof(pthread_t)));
   no_threads = static_cast<int *>(malloc(NUM_THREADS * sizeof(int)));
@@ -65,14 +59,12 @@ void global_init() {
 void global_bs_init() { landfill = new std::multiset<int>(); }
 
 void locks_init() {
-  locks = static_cast<pthread_mutex_t *>(
-      malloc(NUM_THREADS * sizeof(pthread_mutex_t)));
-  for (int i = 0; i < NUM_THREADS; i++) {
-    pthread_mutex_init(&locks[i], nullptr);
-  }
+    // ltype MUST be set before calling.
+    // Otherwise it will do nothing.
+    lockBox = new LockBox(ltype);
 }
 
-void locks_cleanup() { free(locks); }
+void locks_cleanup() { delete lockBox; }
 
 void global_cleanup() {
   free(threads);
@@ -213,24 +205,17 @@ void my_bucketsort(std::multiset<int> &buckets, std::vector<int> &vec) {
 void *pbucket_insert_task(void *args) {
   thread_bvec *t_vec = static_cast<thread_bvec *>(args);
 
-  //    int m = *std::max_element(t_vec->vec->begin(), t_vec->vec->end());
-  //    int k = t_vec->vec->size();  // determined by the size of .reserve() in
-  //    main() while setting up master thread
-
-//  int idex = 0;
-  pthread_mutex_lock(&locks[0]);
-//  for (int i = t_vec->lo; i < t_vec->hi; i++) {
-//    //        idex = (k * (*t_vec->vec)[i] / m);
-//    //        pthread_mutex_lock(&locks[idex]);
-
-//    t_vec->buckets->insert((*t_vec->vec)[idex]);
-
-//    //        pthread_mutex_unlock(&locks[idex]);
-//  }
+  // A stupid amount of work (mostly thinking) went into
+  // making this call the same no matter how the program
+  // is run.
+  thread_local MCS_Node qnode;
+  lockBox->acquire(&qnode);
 
   std::vector<int>::iterator it = t_vec->vec->begin();
   t_vec->buckets->insert(it + t_vec->lo, it + t_vec->hi);
-  pthread_mutex_unlock(&locks[0]);
+
+  lockBox->release(&qnode);
+
   pthread_exit(nullptr);
 }
 
@@ -238,6 +223,7 @@ void *pbucket_insert_task(void *args) {
 // where n is arr.size() / MIN_ELEMENTS_PER_THREAD
 void *pbucketsort(void *args) {
   thread_bvec *t_vec = static_cast<thread_bvec *>(args);
+
 
   // --- setup ---
   //    int m = *std::max_element(t_vec->vec->begin(), t_vec->vec->end());
@@ -291,17 +277,18 @@ void *pbucketsort(void *args) {
   }
 
   // Now do last bit in main thread
-
-  //    int idex = 0;
   t_vec->lo = ctrl;
   t_vec->hi = sz;
-  pthread_mutex_lock(&locks[0]);
+
+  thread_local MCS_Node qnode;
+  lockBox->acquire(&qnode);
 
   // Insert a range of memory. According to docs its faster (and I dont have to for loop it)
   std::vector<int>::iterator it = t_vec->vec->begin();
   t_vec->buckets->insert(it + t_vec->lo, it + t_vec->hi);
 
-  pthread_mutex_unlock(&locks[0]);
+  lockBox->release(&qnode);
+
 
   for (int i = 1; i < tid; i++) {
     pthread_join(threads[i], nullptr);
@@ -364,10 +351,48 @@ int main(int argc, char *argv[]) {
     // Extract algorithm type
     if (result.count("alg")) {
       algorithm = result["alg"].as<std::string>();
+
       if (algorithm == "fj")
         algType = FORK_JOIN;
-      else if (algorithm == "bucket")
+
+      else if (algorithm == "bucket"){
         algType = BUCKET;
+        if (result.count("bar")){
+            printf("No barriers were used in the Bucketsort algorithm.\nRun Count to check barrier performance.\n");
+            return 0;
+        }
+        if (result.count("lock")){
+            // I hate this format.
+            std::string locktype;
+            locktype = result["lock"].as<std::string>();
+            if (locktype == "tas"){
+                ltype = LOCK_TYPE_TAS;
+            }
+            else if (locktype == "ttas"){
+                ltype = LOCK_TYPE_TTAS;
+            }
+            else if (locktype == "ticket"){
+                ltype = LOCK_TYPE_TICKET;
+            }
+            else if (locktype == "mcs"){
+                ltype = LOCK_TYPE_MCS;
+            }
+            else if (locktype == "pthread"){
+                ltype = LOCK_TYPE_PTHREAD;
+            }
+            else if (locktype == "aflag"){
+                ltype = LOCK_TYPE_AFLAG;
+            }
+            else {
+                printf("No recognized or supported lock type found. Try lowercase or input supported lock type.\n");
+                return 0;
+            }
+        }
+        else {
+            printf("Please supply a lock type to be used.\nValues are: tas, ttas, ticket, mcs, pthread, aflag\n");
+            return 0;
+        }
+      }
       else {
         printf("Improper algorithm argument supplied, Fork/Join assumed");
         algType = FORK_JOIN;
@@ -508,7 +533,7 @@ int main(int argc, char *argv[]) {
     break;
   }
   case ALG_UNDEFINED: {
-    printf("This should have been set or returned before getting here\n");
+    printf("ALG_UNDEFINED - This should have been set or returned before getting here\n");
     return -1;
   }
   default: {
@@ -522,7 +547,7 @@ int main(int argc, char *argv[]) {
   elapsed_ns =
       (end.tv_sec - start.tv_sec) * 1000000000 + (end.tv_nsec - start.tv_nsec);
   printf("Elapsed (ns): %llu\n", elapsed_ns);
-  double elapsed_s = ((double)elapsed_ns) / 1000000000.0;
+  double elapsed_s = static_cast<double>(elapsed_ns) / 1000000000.0;
   printf("Elapsed (s): %lf\n", elapsed_s);
 
   // --- Write data ---
@@ -533,6 +558,7 @@ int main(int argc, char *argv[]) {
       for (std::vector<int>::const_iterator i = file_print.begin();
            i != file_print.end(); i++) {
         outfile << *i << std::endl;
+        std::cout << *i << std::endl;   // comment to remove/add terminal print
       }
     } catch (std::exception &e) {
       std::cout << e.what();

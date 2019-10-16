@@ -8,8 +8,11 @@ LIBS += -pthread
 
 SOURCES += \
 #    Source/counter.cpp \
+    Source/locks.cpp \
     Source/mysort.cpp
 
 HEADERS += \
+    Source/include/barrier.hpp \
+    Source/include/barriers.hpp \
     Source/include/cxxopts.hpp \
     Source/include/locks.hpp

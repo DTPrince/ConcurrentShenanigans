@@ -2,65 +2,66 @@
 #define LOCKS_HPP
 
 #include <atomic>
+#include <pthread.h>
 
-#define SEQ_CST             memory_order_seq_cst
-#define ACQ                 memory_order_acquire
-#define REL                 memory_order_release
-#define RELAXED             memory_order_relaxed
+#define SEQ_CST             std::memory_order_seq_cst
+#define ACQ                 std::memory_order_acquire
+#define REL                 std::memory_order_release
+#define RELAXED             std::memory_order_relaxed
 
-#define LOCK_TYPE_TAS       0
-#define LOCK_TYPE_TTAS      1
-#define LOCK_TYPE_TICKET    2
-#define LOCK_TYPE_MCS       3
+// Tracks lock types
+typedef enum LockType{
+    LOCK_TYPE_INVALID,
+    LOCK_TYPE_TAS,
+    LOCK_TYPE_TTAS,
+    LOCK_TYPE_TICKET,
+    LOCK_TYPE_MCS,
+    LOCK_TYPE_PTHREAD,
+    LOCK_TYPE_AFLAG
+} LockType;
 
+// Required as a compliment to MCS_Lock.acquire();
+// As I'm stubborn, it will now be grandfathered
+// into the other acquire() fields. Will be overloaded.
+typedef struct MCS_Node{
+    MCS_Node *next;
+    bool locked;    // TODO: this probably has to become atomic.
+} MCS_Node;
+
+// --- LockInterface ---
 // Attempt to force all locks to share the same traits
 // so I can create my lock the same way for all types.
 // might be a pipe dream
 class LockInterface {
 public:
-    // I wanted to use atomic_flag but it does not support load operations
-    // I could just overload TTAS_Lock to use atoimic<bool> but it would provide
-    // bad perf comparisons
-//    std::atomic_flag flag = ATOMIC_FLAG_INIT;
     std::atomic<bool> flag;
-    int counter;
 
     // nomenclature acquire and release are used in favor of
     // lock and unlock for the more sophisticated ticket and MCS locks
-    virtual void acquire() = 0;
-    virtual void release() = 0;
+    virtual void acquire(MCS_Node *qnode = nullptr) = 0;
+    virtual void release(MCS_Node *qnode = nullptr) = 0;
 
     virtual ~LockInterface();
 };
 
+// --- TAS_Lock ---
 // All public because these are glorified structs and private serves no benefit at the moment
 class TAS_Lock : public LockInterface {
 public:
-    void acquire(){
-        bool expect_false = false;
-        // using CAS instead of TAS since one is a real member function and one is not
-        // Expect false so that it will only swap with `true` (and thus acquiring lock)
-        // once the lock is free.
-        // Invert becasue flag.CAS(...) will return false here when flag is locked (value of true)
-        while(!flag.compare_exchange_weak(expect_false, true));    // nada
-    }
-    void release(){
-        flag.store(false);
-    }
+    ~TAS_Lock();
+
+    void acquire(MCS_Node *qnode = nullptr);
+    void release(MCS_Node *qnode = nullptr);
 };
 
+// --- TTAS_Lock ---
 class TTAS_Lock : public LockInterface {
 public:
-    void acquire(){
-        bool expect_false = false;
-        // same as above but with load check.
-        while(flag.load() == true || !flag.compare_exchange_weak(expect_false, true));
-    }
-    void release(){
-        flag.store(false);
-    }
+    void acquire(MCS_Node *qnode = nullptr);
+    void release(MCS_Node *qnode = nullptr);
 };
 
+// --- Ticket_Lock ---
 // TODO: reminder that I left memory orders as implicit
 // Which I believe defaults to sequential but could
 // cause strange problems later in testing. So come bek
@@ -71,70 +72,75 @@ public:
     std::atomic<int> serving;
     std::atomic<int> next;
 
-    Ticket_Lock(){
-        serving.store(0);
-        next.store(0);
-    }
+    Ticket_Lock();
 
-    void acquire(){
-        thread_local int my_num = next.fetch_add(1);
-        while (serving.load() != my_num);   // wait
-    }
-    void release(){
-        // overloaded in std::atomic
-        serving++;
-    }
+    void acquire(MCS_Node *qnode = nullptr);
+    void release(MCS_Node *qnode = nullptr);
 };
 
+// --- MCS_Lock ---
+// This thing slightly ruins the interface because thread_local is
+// needed. Which must be declared in the thread.
 class MCS_Lock : public LockInterface {
 public:
-    typedef struct MCS_Node{
-        MCS_Node *next;
-        bool locked;    // this probably has to become atomic.
-    } MCS_Node;
 
     std::atomic<MCS_Node *> tail;
 
     thread_local static MCS_Node qnode; // queueueueueue node
 
+    void acquire(MCS_Node *qnode);
+    void release(MCS_Node *qnode);
+};
 
-    inline void acquire(){
-        // place new node at end of queue and store address of previous last node
-        // for checking and also to update next-> ptr
-        MCS_Node *prev = tail.exchange(&this->qnode);   // `this` required to reference correct thread_local
+// --- Mutex/Pthread Lock ---
+// Inheriting interface for consistency (in the future..?)
+// Cost is dragging around an atomic bool but whatever
+class Mutex_Lock : LockInterface{
+public:
+    pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
-        // recall that prev took the address of the last node.
-        // meaning if it is null then there is no last node and the queue is empty.
-        if (prev != nullptr){
-            qnode.locked = true;
+    void acquire(MCS_Node *qnode = nullptr);
+    void release(MCS_Node *qnode = nullptr);
+};
 
-            prev->next = &this->qnode;
 
-            while (qnode.locked);   // wait for the lock to free, This is done from
-                                    // `prev->next.locked = true;` in MCS_Lock::release();
+// --- Just a test lock ---
+// Testing the Atomic_flag object as a TAS lock.
+// It is "non-locking" and does not support loads
+// thus cannot make TTAS lock
+class AFlag_Lock {
+public:
+    std::atomic_flag flag = ATOMIC_FLAG_INIT;
+    void acquire(MCS_Node *qnode = nullptr);
+    void release(MCS_Node *qnode = nullptr);
+};
 
-        }
-    }
 
-    inline void release(){
-        // grab successor node to set up exit and wake thread.
-        MCS_Node *succ = qnode.next;
+// --- LockBox ---
+// This class is made to handle cleanly managing
+// lock calls in the program it runs in.
+// The result of this is an ugly class that allows
+// the syntax `lock.acquire()` called in a thread
+// with no extra steps required to determine which
+// lock the user (cmd line) intended to call.
+// **So long as the Lockbox is initialized correctly**
+class LockBox{
+public:
+    LockType ltype = LOCK_TYPE_INVALID;
 
-        // check if there is a waiting thread
-        if (succ == nullptr){
-            // TODO: discover why tf this wont `compare_exchange_strong`
-            if (tail.load() == &this->qnode){
-                tail.store(nullptr);
-                // None waiting, set null and return early.
-                return;
-            }
-        }
-        // wait for qnode.next to sync with tail (see mfukar in creadits)
-        while (succ == nullptr);
+    TAS_Lock *tas_lock = nullptr;
+    TTAS_Lock *ttas_lock = nullptr;
+    Ticket_Lock *ticket_lock = nullptr;
+    MCS_Lock *mcs_lock = nullptr;
+    Mutex_Lock *mutex_lock = nullptr;
+    AFlag_Lock *aflag_lock = nullptr;
 
-        // wake next thread
-        succ->locked = false;
-    }
+    LockBox(LockType lt);
+    ~LockBox();
+
+    int acquire(MCS_Node *qnode = nullptr);
+    int release(MCS_Node *qnode = nullptr);
+
 };
 
 #endif // LOCKS_HPP
