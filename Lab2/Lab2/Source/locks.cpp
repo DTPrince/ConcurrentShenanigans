@@ -57,34 +57,35 @@ void Ticket_Lock::release(MCS_Node *qnode){
     serving++;
 }
 
+thread_local MCS_Node MCS_Lock::qnode;
 
 // --- MCS_Lock ---
-void MCS_Lock::acquire(MCS_Node *qnode){
+void MCS_Lock::acquire(MCS_Node *in_qnode){
     // place new node at end of queue and store address of previous last node
     // for checking and also to update next-> ptr
-    MCS_Node *prev = tail.exchange(qnode);   // `this` required to reference correct thread_local
+    MCS_Node *prev = tail.exchange(&this->qnode);   // `this` required to reference correct thread_local
 
     // recall that prev took the address of the last node.
     // meaning if it is null then there is no last node and the queue is empty.
     if (prev != nullptr){
-        qnode->locked = true;
+        this->qnode.locked = true;
 
-        prev->next = qnode;
+        prev->next = &this->qnode;
 
-        while (qnode->locked);   // wait for the lock to free, This is done from
+        while (this->qnode.locked);   // wait for the lock to free, This is done from
                 // `prev->next.locked = true;` in MCS_Lock::release();
 
     }
 }
 
-void MCS_Lock::release(MCS_Node *qnode){
+void MCS_Lock::release(MCS_Node *in_qnode){
     // grab successor node to set up exit and wake thread.
-    MCS_Node *succ = qnode->next;
+    MCS_Node *succ = this->qnode.next;
 
     // check if there is a waiting thread
     if (succ == nullptr){
         // TODO: discover why tf this wont `compare_exchange_strong`
-        if (tail.load() == qnode){
+        if (tail.load() == &this->qnode){
             tail.store(nullptr);
             // None waiting, set null and return early.
             return;
@@ -94,7 +95,9 @@ void MCS_Lock::release(MCS_Node *qnode){
     while (succ == nullptr);
 
     // wake next thread
+//    if (succ != nullptr){
     succ->locked = false;
+//    }
 }
 
 

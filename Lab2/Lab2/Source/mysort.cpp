@@ -213,13 +213,12 @@ void* pbucket_insert_task(void* args)
     // A stupid amount of work (mostly thinking) went into
     // making this call the same no matter how the program
     // is run.
-    thread_local MCS_Node qnode;
-    lockBox->acquire(&qnode);
+    lockBox->acquire();
 
     std::vector<int>::iterator it = t_vec->vec->begin();
     t_vec->buckets->insert(it + t_vec->lo, it + t_vec->hi);
 
-    lockBox->release(&qnode);
+    lockBox->release();
 
     pthread_exit(nullptr);
 }
@@ -281,14 +280,13 @@ void* pbucketsort(void* args)
     t_vec->lo = ctrl;
     t_vec->hi = sz;
 
-    thread_local MCS_Node qnode;
-    lockBox->acquire(&qnode);
+    lockBox->acquire();
 
     // Insert a range of memory. According to docs its faster (and I dont have to for loop it)
     std::vector<int>::iterator it = t_vec->vec->begin();
     t_vec->buckets->insert(it + t_vec->lo, it + t_vec->hi);
 
-    lockBox->release(&qnode);
+    lockBox->release();
 
     for (int i = 1; i < tid; i++) {
         pthread_join(threads[i], nullptr);

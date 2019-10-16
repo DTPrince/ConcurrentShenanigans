@@ -24,7 +24,7 @@ typedef enum LockType{
 // As I'm stubborn, it will now be grandfathered
 // into the other acquire() fields. Will be overloaded.
 typedef struct MCS_Node{
-    MCS_Node *next;
+    MCS_Node *next = nullptr;
     bool locked;    // TODO: this probably has to become atomic.
 } MCS_Node;
 
