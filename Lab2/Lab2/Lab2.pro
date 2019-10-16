@@ -10,8 +10,7 @@ SOURCES += \
 #    Source/counter.cpp \
     Source/barriers.cpp \
     Source/counter.cpp \
-    Source/locks.cpp \
-    Source/mysort.cpp
+    Source/locks.cpp
 
 HEADERS += \
     Source/include/barrier.hpp \

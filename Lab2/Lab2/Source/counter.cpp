@@ -56,13 +56,11 @@ void global_cleanup(){ free(threads); }
 void* lock_counter(void* thread_id){
     thread_local int tid = threads_active.fetch_add(1);
     thread_local int i = 0;
-//    std::cout << "tid: " << tid << "\n";
+
     for (i = 0; i < iterations; i++){
         if (i%NUM_THREADS == tid){
             lockBox->acquire();
-//            std::cout << "i: " << i << " | i%t: " << i%NUM_THREADS << "\n";
             cntr++;
-//            std::cout << "cntr: " << cntr << "\n";
             lockBox->release();
         }
     }

@@ -24,8 +24,8 @@ typedef enum LockType{
 // As I'm stubborn, it will now be grandfathered
 // into the other acquire() fields. Will be overloaded.
 typedef struct MCS_Node{
-    MCS_Node *next = nullptr;
-    bool locked;    // TODO: this probably has to become atomic.
+    std::atomic<MCS_Node *> next;
+    std::atomic<bool> locked;    // TODO: this probably has to become atomic.
 } MCS_Node;
 
 // --- LockInterface ---
@@ -38,8 +38,8 @@ public:
 
     // nomenclature acquire and release are used in favor of
     // lock and unlock for the more sophisticated ticket and MCS locks
-    virtual void acquire(MCS_Node *qnode = nullptr) = 0;
-    virtual void release(MCS_Node *qnode = nullptr) = 0;
+    virtual void acquire() = 0;
+    virtual void release() = 0;
 
     virtual ~LockInterface();
 };
@@ -50,15 +50,15 @@ class TAS_Lock : public LockInterface {
 public:
     ~TAS_Lock();
 
-    void acquire(MCS_Node *qnode = nullptr);
-    void release(MCS_Node *qnode = nullptr);
+    void acquire();
+    void release();
 };
 
 // --- TTAS_Lock ---
 class TTAS_Lock : public LockInterface {
 public:
-    void acquire(MCS_Node *qnode = nullptr);
-    void release(MCS_Node *qnode = nullptr);
+    void acquire();
+    void release();
 };
 
 // --- Ticket_Lock ---
@@ -72,8 +72,8 @@ public:
 
     Ticket_Lock();
 
-    void acquire(MCS_Node *qnode = nullptr);
-    void release(MCS_Node *qnode = nullptr);
+    void acquire();
+    void release();
 };
 
 // --- MCS_Lock ---
@@ -86,8 +86,10 @@ public:
 
     thread_local static MCS_Node qnode; // queueueueueue node
 
-    void acquire(MCS_Node *qnode);
-    void release(MCS_Node *qnode);
+    MCS_Lock();
+
+    void acquire();
+    void release();
 };
 
 // --- Mutex/Pthread Lock ---
@@ -97,8 +99,8 @@ class Mutex_Lock : LockInterface{
 public:
     pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
-    void acquire(MCS_Node *qnode = nullptr);
-    void release(MCS_Node *qnode = nullptr);
+    void acquire();
+    void release();
 };
 
 
@@ -109,8 +111,8 @@ public:
 class AFlag_Lock {
 public:
     std::atomic_flag flag = ATOMIC_FLAG_INIT;
-    void acquire(MCS_Node *qnode = nullptr);
-    void release(MCS_Node *qnode = nullptr);
+    void acquire();
+    void release();
 };
 
 
@@ -136,8 +138,8 @@ public:
     LockBox(LockType lt);
     ~LockBox();
 
-    int acquire(MCS_Node *qnode = nullptr);
-    int release(MCS_Node *qnode = nullptr);
+    int acquire();
+    int release();
 };
 
 #endif // LOCKS_HPP
