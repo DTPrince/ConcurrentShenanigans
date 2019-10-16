@@ -10,17 +10,13 @@
 #define RELAXED             std::memory_order_relaxed
 
 typedef enum BarrierType{
-    BARRIER_TYPE_SENSE_REV,
+    BARRIER_TYPE_INVALID,
+    BARRIER_TYPE_SENSE,
     BARRIER_TYPE_STD
 } BarrierType;
 
 class BarrierInterface {
 public:
-
-
-    std::atomic<int> count;
-    std::atomic<int> sense;
-
     int num_threads;    //global variable in main cpp file
 
     virtual void wait();
@@ -30,41 +26,37 @@ public:
 
 class SenseReverse_Barrier : BarrierInterface {
 public:
-    SenseReverse_Barrier(){ num_threads = 0; }
-    SenseReverse_Barrier(int n){ num_threads = n; }
+    std::atomic<int> count;
+    std::atomic<int> sense;
 
-    void wait(){
-        thread_local bool my_sense = 0;
-        if (my_sense == 0)
-            my_sense = 1;
-        else
-            my_sense = 0;
+    SenseReverse_Barrier(int n = 0);
 
-        int count_cpy = count.fetch_add(1);
-
-        if (count_cpy == num_threads){
-            count.store(0, RELAXED);
-            sense.store(my_sense);
-        }
-        else{
-            while(sense.load() != my_sense);    //my_sense might be a bit not right
-        }
-    }
+    void wait();
 };
 
 class Barrier : BarrierInterface {
 public:
-    Barrier(){ num_threads = 0; }
-    Barrier(int n){ num_threads = n; }
+    pthread_barrier_t barrier;
 
-    int wait_for = num_threads; // by default
+    Barrier(int n = 0);
 
-    void wait(){
-        count++;
-        while (count.load() < wait_for){
-            // nada
-        }
-    }
+    void wait();
 };
+
+
+// I didnt know what to call it so I mimicked lockBox
+class BarrierBox {
+public:
+    BarrierType btype = BARRIER_TYPE_INVALID;
+
+    Barrier *std_barrier;
+    SenseReverse_Barrier *sr_barrier;
+
+    BarrierBox(BarrierType barrierType, int n = 0);
+    ~BarrierBox();
+
+    void wait();
+};
+
 
 #endif // BARRIERS_HPP

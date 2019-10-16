@@ -140,7 +140,6 @@ public:
 
     int acquire(MCS_Node *qnode = nullptr);
     int release(MCS_Node *qnode = nullptr);
-
 };
 
 #endif // LOCKS_HPP
