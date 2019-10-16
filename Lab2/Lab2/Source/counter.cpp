@@ -56,13 +56,12 @@ void global_cleanup(){ free(threads); }
 void* lock_counter(void* thread_id){
     thread_local int tid = threads_active.fetch_add(1);
     thread_local int i = 0;
-    thread_local static MCS_Node qnode;
 
     for (i = 0; i < iterations; i++){
         if (i%NUM_THREADS == tid){
-            lockBox->acquire(&qnode);
+            lockBox->acquire();
             cntr++;
-            lockBox->release(&qnode);
+            lockBox->release();
         }
     }
     pthread_exit(nullptr);

@@ -20,9 +20,9 @@ typedef enum LockType{
     LOCK_TYPE_AFLAG
 } LockType;
 
-// Required as a compliment to MCS_Lock.acquire(MCS_Node *qnode = nullptr);
+// Required as a compliment to MCS_Lock.acquire();
 // As I'm stubborn, it will now be grandfathered
-// into the other acquire(MCS_Node *qnode = nullptr) fields. Will be overloaded.
+// into the other acquire() fields. Will be overloaded.
 typedef struct MCS_Node{
     std::atomic<MCS_Node *> next;
     std::atomic<bool> locked;    // TODO: this probably has to become atomic.
@@ -38,8 +38,8 @@ public:
 
     // nomenclature acquire and release are used in favor of
     // lock and unlock for the more sophisticated ticket and MCS locks
-    virtual void acquire(MCS_Node *qnode = nullptr) = 0;
-    virtual void release(MCS_Node *qnode = nullptr) = 0;
+    virtual void acquire() = 0;
+    virtual void release() = 0;
 
     virtual ~LockInterface();
 };
@@ -50,15 +50,15 @@ class TAS_Lock : public LockInterface {
 public:
     ~TAS_Lock();
 
-    void acquire(MCS_Node *qnode = nullptr);
-    void release(MCS_Node *qnode = nullptr);
+    void acquire();
+    void release();
 };
 
 // --- TTAS_Lock ---
 class TTAS_Lock : public LockInterface {
 public:
-    void acquire(MCS_Node *qnode = nullptr);
-    void release(MCS_Node *qnode = nullptr);
+    void acquire();
+    void release();
 };
 
 // --- Ticket_Lock ---
@@ -72,8 +72,8 @@ public:
 
     Ticket_Lock();
 
-    void acquire(MCS_Node *qnode = nullptr);
-    void release(MCS_Node *qnode = nullptr);
+    void acquire();
+    void release();
 };
 
 // --- MCS_Lock ---
@@ -84,12 +84,12 @@ public:
 
     std::atomic<MCS_Node *> tail;
 
-//    thread_local static MCS_Node qnode; // queueueueueue node
+    thread_local static MCS_Node qnode; // queueueueueue node
 
     MCS_Lock();
 
-    void acquire(MCS_Node *qnode = nullptr);
-    void release(MCS_Node *qnode = nullptr);
+    void acquire();
+    void release();
 };
 
 // --- Mutex/Pthread Lock ---
@@ -99,8 +99,8 @@ class Mutex_Lock : LockInterface{
 public:
     pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
-    void acquire(MCS_Node *qnode = nullptr);
-    void release(MCS_Node *qnode = nullptr);
+    void acquire();
+    void release();
 };
 
 
@@ -111,8 +111,8 @@ public:
 class AFlag_Lock {
 public:
     std::atomic_flag flag = ATOMIC_FLAG_INIT;
-    void acquire(MCS_Node *qnode = nullptr);
-    void release(MCS_Node *qnode = nullptr);
+    void acquire();
+    void release();
 };
 
 
@@ -120,7 +120,7 @@ public:
 // This class is made to handle cleanly managing
 // lock calls in the program it runs in.
 // The result of this is an ugly class that allows
-// the syntax `lock.acquire(MCS_Node *qnode = nullptr)` called in a thread
+// the syntax `lock.acquire()` called in a thread
 // with no extra steps required to determine which
 // lock the user (cmd line) intended to call.
 // **So long as the Lockbox is initialized correctly**
@@ -138,8 +138,8 @@ public:
     LockBox(LockType lt);
     ~LockBox();
 
-    int acquire(MCS_Node *qnode = nullptr);
-    int release(MCS_Node *qnode = nullptr);
+    int acquire();
+    int release();
 };
 
 #endif // LOCKS_HPP
