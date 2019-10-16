@@ -1,4 +1,6 @@
+#include <atomic>
 #include "include/locks.hpp"
+#include "include/cpu_relax.hpp"
 
 // --- Making the compliler happy ---
 LockInterface::~LockInterface(){}
@@ -7,7 +9,7 @@ LockInterface::~LockInterface(){}
 // --- TAS_Lock ---
 TAS_Lock::~TAS_Lock(){}
 
-void TAS_Lock::acquire(){
+void TAS_Lock::acquire(MCS_Node *qnode){
     bool expect_false = false;
     // using CAS instead of TAS since one is a real member function and one is not
     // Expect false so that it will only swap with `true` (and thus acquiring lock)
@@ -16,19 +18,19 @@ void TAS_Lock::acquire(){
     while(!flag.compare_exchange_weak(expect_false, true));    // nada
 }
 
-void TAS_Lock::release(){
+void TAS_Lock::release(MCS_Node *qnode){
     flag.store(false);
 }
 
 
 // --- TTAS_Lock ---
-void TTAS_Lock::acquire(){
+void TTAS_Lock::acquire(MCS_Node *qnode){
     bool expect_false = false;
     // same as above but with load check.
     while(flag.load() == true || !flag.compare_exchange_weak(expect_false, true));
 }
 
-void TTAS_Lock::release(){
+void TTAS_Lock::release(MCS_Node *qnode){
     flag.store(false);
 }
 
@@ -39,7 +41,7 @@ Ticket_Lock::Ticket_Lock(){
     next.store(0);
 }
 
-void Ticket_Lock::acquire(){
+void Ticket_Lock::acquire(MCS_Node *qnode){
     // This became atomic because running more iterations
     // in the counter bench than there were threads would
     // cause unexpewcted flogging of my_num when the compiler
@@ -52,7 +54,7 @@ void Ticket_Lock::acquire(){
     while (serving.load() != my_num);   // wait
 }
 
-void Ticket_Lock::release(){
+void Ticket_Lock::release(MCS_Node *qnode){
     // overloaded in std::atomic
     serving++;
 }
@@ -60,87 +62,87 @@ void Ticket_Lock::release(){
 
 
 // --- MCS_Lock ---
-thread_local MCS_Node MCS_Lock::qnode;
+//thread_local MCS_Node MCS_Lock::qnode;
 
 MCS_Lock::MCS_Lock(){
-    this->qnode.next.store(nullptr);
+//    this->qnode.next.store(nullptr);
     tail.store(nullptr);
 }
 
-void MCS_Lock::acquire(){
+void MCS_Lock::acquire(MCS_Node *qnode){
     // place new node at end of queue and store address of previous last node
     // for checking and also to update next-> ptr
-//    MCS_Node *prev = tail.exchange(&this->qnode);   // `this` required to reference correct thread_local
+/*
     MCS_Node *prev = tail.load();
-    this->qnode.next.store(nullptr);    // I believe this is redundant but I want to force it for
+    qnode->next.store(nullptr);    // I believe this is redundant but I want to force it for
                                         // thread reuse. Small steps.
 
-    while (!tail.compare_exchange_weak(prev, &this->qnode)){
+    while (!tail.compare_exchange_weak(prev, qnode)){
         prev = tail.load();
     }
     // recall that prev took the address of the last node.
     // meaning if it is null then there is no last node and the queue is empty.
     if (prev != nullptr){
-        this->qnode.locked.store(true);
+        qnode->locked.store(true);
 
-        prev->next.store(&this->qnode);
+        prev->next.store(qnode);
 
-        while (this->qnode.locked.load()){   // wait for the lock to free, This is done from
+        while (qnode->locked.load()){   // wait for the lock to free, This is done from
                                       // `prev->next.locked = true;` in MCS_Lock::release();
 
         }
     }
-}
+*/
+    MCS_Node *prev = tail.exchange(qnode);
 
-void MCS_Lock::release(){
-//    // grab successor node to set up exit and wake thread.
-//    MCS_Node *succ = this->qnode.next.load();
+    if (prev != nullptr){
+        qnode->locked.store(true);
+        prev->next.store(qnode);
 
-//    // check if there is not a waiting thread
-//    if (succ == nullptr){
-//        if (tail.load() == &this->qnode){
-//            tail.store(nullptr);
-//            // None waiting, set null and return early.
-//            return;
-//        }
-//    }
-//    // wait for qnode.next to sync with tail (see mfukar in creadits)
-//    while (succ == nullptr);
-
-//    // wake next thread
-//    succ->locked.store(false);
-
-    if (tail.load() == &this->qnode){
-        tail.store(nullptr);
-    }
-    else {
-        while (this->qnode.next.load() == nullptr){
-            // waow thats some garbage
-            this->qnode.next.load()->locked.store(false);
+        while(qnode->locked.load()){
+            // cpu_relax comes from ... and mfukar
+            cpu_relax();
         }
     }
+
+}
+
+void MCS_Lock::release(MCS_Node *qnode){
+    // https://libfbp.blogspot.com/2018/01/c-mellor-crummey-scott-mcs-lock.html
+
+    if (qnode->next.load() == nullptr){
+        MCS_Node *temp = qnode;
+        if (tail.compare_exchange_strong(temp, nullptr, REL, RELAXED)){
+            return;
+        }
+        while (qnode->next.load() == nullptr);
+    }
+
+    qnode->next.load()->locked.store(false);
+
+    qnode->next.store(nullptr);
 }
 
 
 // --- Mutex_Lock ---
-void Mutex_Lock::acquire(){
+void Mutex_Lock::acquire(MCS_Node *qnode){
     // Does wait for lock though it took some convincing
     // to remind me
     pthread_mutex_lock(&lock);
 }
 
-void Mutex_Lock::release(){
+void Mutex_Lock::release(MCS_Node *qnode){
     pthread_mutex_lock(&lock);
 }
 
 
 // --- AFlag_Lock ---
-void AFlag_Lock::acquire(){
+void AFlag_Lock::acquire(MCS_Node *qnode){
     // default SEQ_CST
     flag.test_and_set();
 }
 
-void AFlag_Lock::release(){
+void AFlag_Lock::release(MCS_Node *qnode){
     flag.clear();
 }
 
@@ -213,7 +215,7 @@ LockBox::~LockBox(){
     }
 }
 
-int LockBox::acquire(){
+int LockBox::acquire(MCS_Node *qnode){
     switch(ltype){
     case (LOCK_TYPE_TAS):{
         tas_lock->acquire();
@@ -228,7 +230,7 @@ int LockBox::acquire(){
         break;
     }
     case (LOCK_TYPE_MCS):{
-        mcs_lock->acquire();
+        mcs_lock->acquire(qnode);
         break;
     }
     case (LOCK_TYPE_PTHREAD):{
@@ -248,7 +250,7 @@ int LockBox::acquire(){
     return 0;
 }
 
-int LockBox::release(){
+int LockBox::release(MCS_Node *qnode){
     switch(ltype){
     case (LOCK_TYPE_TAS):{
         tas_lock->release();
@@ -263,7 +265,7 @@ int LockBox::release(){
         break;
     }
     case (LOCK_TYPE_MCS):{
-        mcs_lock->release();
+        mcs_lock->release(qnode);
         break;
     }
     case (LOCK_TYPE_PTHREAD):{

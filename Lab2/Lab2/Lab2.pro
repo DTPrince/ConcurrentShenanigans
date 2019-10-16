@@ -15,5 +15,6 @@ SOURCES += \
 HEADERS += \
     Source/include/barrier.hpp \
     Source/include/barriers.hpp \
+    Source/include/cpu_relax.hpp \
     Source/include/cxxopts.hpp \
     Source/include/locks.hpp
