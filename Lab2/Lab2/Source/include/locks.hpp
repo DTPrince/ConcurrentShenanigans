@@ -65,8 +65,6 @@ public:
 // TODO: reminder that I left memory orders as implicit
 // Which I believe defaults to sequential but could
 // cause strange problems later in testing. So come bek
-// TODO: check the warning on no out-of-line virt method
-//       definitions; vtable emitt etc etc etc
 class Ticket_Lock : public LockInterface {
 public:
     std::atomic<int> serving;

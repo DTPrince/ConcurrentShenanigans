@@ -40,7 +40,15 @@ Ticket_Lock::Ticket_Lock(){
 }
 
 void Ticket_Lock::acquire(MCS_Node *qnode){
-    thread_local int my_num = next.fetch_add(1);
+    // This became atomic because running more iterations
+    // in the counter bench than there were threads would
+    // cause unexpewcted flogging of my_num when the compiler
+    // launches threads seemingly at random and the fetch/++
+    // would be done in unexpected orders. Meaning a thread
+    // could be both the released and the next in line, causing
+    // weird shit to happen with my_num accesses.
+    thread_local std::atomic<int> my_num;
+    my_num.store(next.fetch_add(1));// = next.fetch_add(1);
     while (serving.load() != my_num);   // wait
 }
 

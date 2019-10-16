@@ -25,6 +25,8 @@ static int iterations = 0;
 static int cntr = 0;
 static struct timespec start, end;
 
+static std::atomic<int> threads_active;
+
 LockBox* lockBox = nullptr;
 LockType ltype = LOCK_TYPE_INVALID;
 
@@ -33,6 +35,8 @@ BarrierType btype = BARRIER_TYPE_INVALID;
 
 void global_init(){
     threads = static_cast<pthread_t*>(malloc(NUM_THREADS * sizeof(pthread_t)));
+    threads_active.store(0);
+
 }
 
 void locks_init()
@@ -50,11 +54,15 @@ void barrier_cleanup() { delete barrierBox; }
 void global_cleanup(){ free(threads); }
 
 void* lock_counter(void* thread_id){
-    thread_local int *tid = static_cast<int *>(thread_id);
-    for (int i = 0; i < iterations; i++){
-        if (i%NUM_THREADS == *tid){
+    thread_local int tid = threads_active.fetch_add(1);
+    thread_local int i = 0;
+//    std::cout << "tid: " << tid << "\n";
+    for (i = 0; i < iterations; i++){
+        if (i%NUM_THREADS == tid){
             lockBox->acquire();
+//            std::cout << "i: " << i << " | i%t: " << i%NUM_THREADS << "\n";
             cntr++;
+//            std::cout << "cntr: " << cntr << "\n";
             lockBox->release();
         }
     }
@@ -62,9 +70,11 @@ void* lock_counter(void* thread_id){
 }
 
 void* barrier_counter(void* thread_id){
-    thread_local int *tid = static_cast<int *>(thread_id);
-    for (int i = 0; i < iterations; i++){
-        if (i%NUM_THREADS == *tid){
+    thread_local int tid = threads_active.fetch_add(1);
+    thread_local int i = 0;
+
+    for (i = 0; i < iterations; i++){
+        if (i%NUM_THREADS == tid){
             cntr++;
         }
         barrierBox->wait();
