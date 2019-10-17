@@ -1,9 +1,17 @@
 # Lab 2
 ### Derek Prince
+*****
 
 #### Brief Description
 In this lab I extended Lab 1's bucket sort algorithm to use one of a collection of possible locks -- specifically TAS, TTAS, Ticket, MCS, Pthread.h, and my own with atomic_flag that I wanted to test out.
 In addition to this, a sepparate counter micro-benchmark was made to test out the locks as well as two barriers, Pthread.h and a sense reversal.
+
+#### Notes
+Folling unix convention, there are always spaces expected between short token (i.e. `-t` vs `--threads`) and the input. Similarly, long-form tokens always expect an `=` between them and the input (ex. `--alg=bucket`). I only mention it because it doesn not *exactly* match some of the examples in the writeup but is more consistent.
+
+All programs can be run with `--help` to show what is expected.
+
+I was intriqued by `std::atomic_flag` so I created a simple TAS lock around it as an extra locking option. That is the sole reason for it's existence.
 
 ### Algorithms
 ##### Quicksort
@@ -51,16 +59,35 @@ In the case of the barriers, the sense reversal barrier absolutely flogs the pth
 
 ### Code Organization
 
-
+In this lab I broke out the locks and barriers into classes with their respective hpp/cpp files to make them more portable and maintainable as they are used interchangably between the `mysort` and `counter` programs. The main thing in these files is a virtual interface that all locks or barriers are forced to implement. The reason for this is so that I can create a static lockBox (or barrierBox) object, initialize it in main() and call `lockBox->lock()` (or `barrierBox->wait()`)in any thread without having to know which the user specified from the command line.
+Otherwise the programs follow a pretty ugly but linear switching pattern through main() to first parse the command line, switch on those options, initialize relevant data and determine how best to spin up the threads to sort or simply launch them for count. Count was deliberately left without the thread overhead optimizations to allow testing the effects of thread overhead and such.
+There is also a single cpu\_relax() function in cpu\_relax.hpp that is used in the sense reversal barrier to ease the spinning while waiting that I adapted from ifknot (see credits).
 
 #### File Descriptions
-##### File 1
-##### File 2
-##### File 3 etc
-* Makefile - makefile to automate build with gcc.
-* Readme.md - Markdown version of this PDF
-* source/mysort.cpp - Entry point of program containing all relevant code.
-* source/include/cxxopts.hpp - CLI argument parser library
+* ##### Readme.md
+    - The markdown version of this writeup (I use these in jekyll with prettier rendering is why .md)
+* ##### DerekPrince_writeup.pdf
+    - You are here.
+* ##### Makefile
+    - makefile to automate build with gcc.
+* ##### source/mysort.cpp
+    - Entry point of program.
+    - Contains quicksort and bucketsort implementations.
+* ##### source/counter.cpp
+    - Contains the counter microbenchmark and nothing else
+* ##### source/locks.cpp
+    - Contains functioins/methods of the lock classes
+* ##### source/barriers.cpp
+    - Contains the functions/methods of the barrier classes
+* ##### source/include/cxxopts.hpp
+    - CLI argument parser library
+* ##### source/include/locks.hpp
+    - Class definitions of all the locks with supporting `#define`s
+* ##### source/include/barriers.hpp
+    - Class definitions of all the barriers with supporting `#define`s
+* ##### source/include/cpu_relax.hpp
+    - Contains support function cpu_relax() that fit nowhere else.
+
 
 #### Compilation instructions
 Unzip file and cd into top level with the Makefile. The file structure should look as such:
@@ -83,23 +110,54 @@ Unzip file and cd into top level with the Makefile. The file structure should lo
 
 To build simply run `make`.
 
-`make clean` will remove object files while `make uninstall` will remove the executables.
+`make clean` will remove object files while `make uninstall` will remove the executables. `make remove` will delete objects and executables though the script is currently pretty stupid and will crash if any removes are missing.
 
 #### Execution Instructions
 The program operates as the lab directed with a few extra options that should be mostly transparent.
 The main difference being the help menu accessed by running `mysort --help`.
 
+Counter --help:
+```
+Counter micro-benchmark for lab 2.
+Usage:
+  <pwd>/counter [OPTION...] positional parameters
+
+  -n, --name                    My name (for grading purposes)
+  -o, --output FILE             Output file name>
+  -t, --threads NUM_THREADS     Number of threads to be used
+  -i, --iter Iterations desired
+                                Number each thread iterates over
+  -b, --bar <sense, pthread>    Selects the barrier type to use.
+  -l, --lock  <tas, ttas, ticket, mcs, pthread, aflag>
+                                Selects the lock type to use.
+  -h, --help                    Display help options
+```
+
+mysort --help
+```
+Text parse and sort for lab 2.
+Usage:
+  <pwd>/mysort [OPTION...] positional parameters
+
+  -n, --name                    My name (for grading purposes)
+  -o, --output FILE             Output file name
+  -t, --threads NUM_THREADS     Number of threads to be used
+  -b, --bar <sense, pthread>    However no barriers were
+                                used in this so run counter to test.
+  -l, --lock <tas, ttas, ticket, mcs, pthread, aflag>
+                                Lock type to use.
+      --alg <fj, bucket>        Algorithm to sort with
+  -h, --help                    Display help options
+```
+Examples:
 To specify number of threads to run on (default 5), there must be a space between `-t` and the number.
-
 To have `mysort` print author name (me) run `mysort --name`.
-
-Ex: to run mysort with fork/join qsort on 28 threads and output to ex.txt `mysort input.txt -o ex.txt --alg=fj -t 28`.
-
+To run mysort with a TTAS locking bucketsort on 28 threads and output to ex.txt `./mysort input.txt -o ex.txt --alg=bucket -t 28 --lock=ttas`.
 Output will by default be written to a `output.txt` file unless specified.
 
-
 ##### Terminal Output
-The program will only print the time taken in this version. I believe the terminal outfile text print will still work if the code is uncommented (because of `stl::iterators`) but I have not tested it.
+The mysort program will only print the time taken to sort a file and output the sorted list to the specified output file.
+The counter program prints the time taken followed by the counter total.
 
 #### Expected Input
 A text file with one number per line up to the size of the range of an int.
@@ -126,7 +184,7 @@ Letters as fas as has been tested are ignored and removed from the input. See ex
 
 
 #### Extant Bugs
-For some reason when running the counter micro-benchmark with sense reversal barrier selected and roughly 15+ threads iterating over 1000 (or so) the program hangs on thread.join(). It is not all numbers of threads over 15 though and the iteration count seems to matter. If I had not discovered this bug right before the deadline then I would have squashed it but as it is it feels like hunting for co-prime numbers with a shotgun - i.e. entirely ineffective and random.
+- For some reason when running the counter micro-benchmark with sense reversal barrier selected and roughly 15+ threads iterating over 1000 (or so) the program hangs on thread.join(). It is not all numbers of threads over 15 though and the iteration count seems to matter. If I had not discovered this bug right before the deadline then I would have squashed it but as it is it feels like hunting for co-prime numbers with a shotgun - i.e. entirely ineffective and random.
 
-A file of only 0s will crash on overflow as it does an infinite recursion downwards. I don't realistically see this being a problem so I didnt limit it.
+- A file of only 0s will crash on overflow as it does an infinite recursion downwards. I don't realistically see this being a problem so I didnt limit it.
 

@@ -8,8 +8,8 @@ LIBS += -pthread
 
 SOURCES += \
     Source/barriers.cpp \
-    Source/counter.cpp \
-    Source/locks.cpp
+    Source/locks.cpp \
+    Source/mysort.cpp
 
 HEADERS += \
     Source/include/barrier.hpp \
@@ -19,4 +19,5 @@ HEADERS += \
     Source/include/locks.hpp
 
 DISTFILES += \
+    Makefile \
     Readme.md
