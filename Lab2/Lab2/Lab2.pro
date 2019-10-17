@@ -7,7 +7,6 @@ QMAKE_CXXFLAGS += -std=c++0x -pthread
 LIBS += -pthread
 
 SOURCES += \
-#    Source/counter.cpp \
     Source/barriers.cpp \
     Source/counter.cpp \
     Source/locks.cpp
@@ -18,3 +17,6 @@ HEADERS += \
     Source/include/cpu_relax.hpp \
     Source/include/cxxopts.hpp \
     Source/include/locks.hpp
+
+DISTFILES += \
+    Readme.md

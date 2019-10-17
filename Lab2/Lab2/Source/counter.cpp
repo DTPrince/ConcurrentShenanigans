@@ -86,10 +86,10 @@ int main(int argc, char* argv[]){
     options.add_options()(
         "n, name", "My name (for grading purposes)", cxxopts::value<bool>())(
         "o, output", "Output file name", cxxopts::value<std::string>(), "FILE")(
-        "t, threads", "Number of threads to be used", cxxopts::value<int>())(
-        "i, iter", "Number each thread iterates over", cxxopts::value<int>())(
-        "b, bar", "Barrier type to use.\nOptions are: <sense, pthread>", cxxopts::value<std::string>())(
-        "l, lock", "Lock type to use.\nOptions are: <tas, ttas, ticket, mcs, pthread, aflag>", cxxopts::value<std::string>())(
+        "t, threads", "Number of threads to be used", cxxopts::value<int>(), "NUM_THREADS")(
+        "i, iter", "Number each thread iterates over", cxxopts::value<int>(), "Iterations desired")(
+        "b, bar", "Selects the barrier type to use.", cxxopts::value<std::string>(), "<sense, pthread>")(
+        "l, lock", "Selects the lock type to use.", cxxopts::value<std::string>(), " <tas, ttas, ticket, mcs, pthread, aflag>")(
         "h, help", "Display help options");
 
     std::string ofile = "";
@@ -172,6 +172,9 @@ int main(int argc, char* argv[]){
         // Extract thread number information
         if (result.count("threads")) {
             NUM_THREADS = result["t"].as<int>();
+            if (NUM_THREADS > 15){//temp
+                NUM_THREADS = 10;
+            }
             if (NUM_THREADS > 150) {
                 printf("Error: Too many threads\n");
                 return (-1);

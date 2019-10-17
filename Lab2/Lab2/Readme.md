@@ -1,17 +1,11 @@
-# Lab 1
+# Lab 2
+### Derek Prince
 
-### Parallel Quick/Bucket Sort Program
-#### Derek Prince
+#### Brief Description
+In this lab I extended Lab 1's bucket sort algorithm to use one of a collection of possible locks -- specifically TAS, TTAS, Ticket, MCS, Pthread.h, and my own with atomic_flag that I wanted to test out.
+In addition to this, a sepparate counter micro-benchmark was made to test out the locks as well as two barriers, Pthread.h and a sense reversal.
 
-#### Code Organization
-
-The code is in a single file save for the argument parser in the header. main() starts by setting up the argument parser and then parsing out the
-the options. Options are parsed as if-checking statments with `--help` and `--name` having first and second priority as they return with 0 
-after running. If neither of those options are selected then it pulls out the othre relevant input paramerers.
-
-After reading in the input file, the program either runs the parallel quicksort code or the bucketsort depending on which argument (`fj | bucket`) was passed in at launch.
-Since making threads is expensive, there is first a check to see if it would not make more sense to simply run a lighter, sequential version of the algorithm before diving into setting up a semi-thread pool.
-
+### Algorithms
 ##### Quicksort
 The quicksort algorithm starts by calling out the parallel quicksort routine in a main thread. Once in the quicksort function, the main thread continues splitting the arrays into a partial order,
 only creating threads for the higher (left)end of the array and continuing the work on the lower (right) itself as it would be idle waiting on join() otherwise.
@@ -26,25 +20,73 @@ while avoiding having so many threads that each of them barely does any work. At
 
 The bucketsort algorithm is also spread into a main thread caller (that also finishes the remaining sorts that dont divide evenly into threads) and an insert task spun out of the main thread to the worker threads.
 
+#### Algorithm Performance
+#### counter
+As barriers were not used in mysort, extensive perf analysis was not done on `mysort` in favor of `counter` benchmark to more directly correlate the data. (However, TTAS and Atomic_Flag locks performed the best on a list of 1000 random numbers if only barely)
+Data was gathered with GNU perf and averaged over 10 runs.
+* Locks
+`perf stat -e L1-dcache-store,L1-dcache-load,L1-dcache-prefetches,branch-instructions,branch-misses,branch-loads,branch-load-misses,page-faults ./Lab2 -o output  -t 50 --iter=1000 --lock=<lock type>`
+
+| Lock             | TAS       | TTAS        | Ticket      | MCS         | Pthread     | AFlag       |
+|------------------|-----------|-------------|-------------|-------------|-------------|-------------|
+| Run Time (ns)    | 0.0011690 | 0.0011206   | 0.0011086   | 0.0010869   | 0.0010391   | 0.0011791   |
+| L1 Cache (Hit %) | 90.205    | 89.955      | 73.41375    | 65.6925     | 95.2225     | 87.72375    |
+| Branch (Miss %)  | 1.525     | 1.4725      | 1.44125     | 1.495       | 1.41375     | 1.495       |
+| Page Fault       | 249.375   | 250         | 249         | 249.25      | 248.625     | 248.625     |
+
+* Barriers
+`perf stat -e L1-dcache-store,L1-dcache-load,L1-dcache-prefetches,branch-instructions,branch-misses,branch-loads,branch-load-misses ./Lab2 test.txt -o output -t 10 iter=1000 --bar=<barrier type>`
+
+
+| Barrier          | Sense     | Pthread   |
+|------------------|-----------|-----------|
+| Run Time (ns)    | 0.0008271 | 0.0076188 |
+| L1 Cache (Hit %) | 77.89     | 40.6625   |
+| Branch (Miss %)  | 1.075     | 2.41375   |
+| Page Fault       | 168.25    | 169.25    |
+
+#### Analysis
+For the locks, the fastest lock (as in the sorting test) was `std::atomic_flag` followed by Pthread mutex lock. This is likely because of the overhead of acquiring the other locks. In particular, the unfairness of the TTAS lock is clearly evident as the counter has a very clear access pattern that revolves through the thread ids as the iterator increases. The lock that should be acquired is the same one that will initially bounce from load() instead of flag.tas(). The L1 cache hit for the pthread mutex lock is extraordinarily high which makes me wonder if the structures are cache-line padded. The LLVM linter was warning me that my structures would be padded to match cache line size but I compiled with GCC so I am unsure if that actually happened implicitly. Otherwise, the branch miss % and page faults are all roughly equal, deviating only below in the barrier implementations.
+In the case of the barriers, the sense reversal barrier absolutely flogs the pthread implementation by almost 10x. I did not use barriers in my bucket sort algorithm so I cannot test it in that case but it seems like this barrier excels with the counter for the same reason the TTAS lock failed (ordered, rolling lock accesses). One thing, however that is very surprising is how many branch misses and L1 cache misses the pthread barrier has. Neither barrier has a particularly long-winded set of methods but the sense reversal barrier has significantly more elements involved in the wait() function so it surprises me that they are more often in the cache. There is a solid chance the difference comes down to the use of atomics in my sense barrier versus what seems to be mutexes in pthreads. An interesting comparison would be a simple barrier based on atomic flags and then implementing the sense signals with `std::atomic_flag`s as well.
+
+### Code Organization
+
+
+
+#### File Descriptions
+##### File 1
+##### File 2
+##### File 3 etc
+* Makefile - makefile to automate build with gcc.
+* Readme.md - Markdown version of this PDF
+* source/mysort.cpp - Entry point of program containing all relevant code.
+* source/include/cxxopts.hpp - CLI argument parser library
+
 #### Compilation instructions
 Unzip file and cd into top level with the Makefile. The file structure should look as such:
 ```
- --- Lab1/
+| Lab2/
 | ------ Readme.md
 | ------ Writeup.pdf
 | ------ Makefile
 | ------ Source/
 |       |------ mysort.cpp
+|       |------ counter.cpp
+|       |------ locks.cpp
+|       |------ barriers.cpp
 |       |------ Include/
 |       |       |------ cxxopts.hpp
+|       |       |------ cpu_relax.hpp
+|       |       |------ locks.hpp
+|       |       |------ barriers.hpp
 ```
 
-To build simply type `make` and it will compile with g++ and C++11 standards as well as -Wall -Werror.
+To build simply run `make`.
 
-`make clean` will remove object files while `make uninstall` will remove the executable.
+`make clean` will remove object files while `make uninstall` will remove the executables.
 
 #### Execution Instructions
-The program operates as the lab directed with a few extra options that should be mostly transparent. 
+The program operates as the lab directed with a few extra options that should be mostly transparent.
 The main difference being the help menu accessed by running `mysort --help`.
 
 To specify number of threads to run on (default 5), there must be a space between `-t` and the number.
@@ -75,21 +117,16 @@ Ex:
 ```
 Letters as fas as has been tested are ignored and removed from the input. See extant bugs section for more.
 
-#### File Descriptions
-* Makefile - makefile to automate build with gcc.
-* Readme.md - Markdown version of this PDF
-* source/mysort.cpp - Entry point of program containing all relevant code.
-* source/include/cxxopts.hpp - CLI argument parser library
-
 #### Credits
-* [cxxopts](https://github.com/jarro2783/cxxopts) for command line parsing because nobody but C++ needs to solve this issue again.
+* [cxxopts](https://github.com/jarro2783/cxxopts) for command line parsing because nobody (save C++) needs to solve this issue again.
 * [Clang Format](https://clang.llvm.org/docs/ClangFormat.html) for cleaning my erratic coding styling.
 * [Dillinger.io](https://dillinger.io/) for the pretty markdown while the npm and pip world failed me.
-* [mfukar](https://mfukar.github.io/) for his resources on MCS locks
+* [mfukar](https://mfukar.github.io/) for their resources on MCS locks
+* [ifknot](https://libfbp.blogspot.com/2018/01/c-mellor-crummey-scott-mcs-lock.html) for their mcs_lock resources and an asm memory relax instruction.
 
 
 #### Extant Bugs
-None *known* bugs but unsupported file formats are largely untested. Letters and leading 0's are have proven to be ignored for all basic testing cases.
+For some reason when running the counter micro-benchmark with sense reversal barrier selected and roughly 15+ threads iterating over 1000 (or so) the program hangs on thread.join(). It is not all numbers of threads over 15 though and the iteration count seems to matter. If I had not discovered this bug right before the deadline then I would have squashed it but as it is it feels like hunting for co-prime numbers with a shotgun - i.e. entirely ineffective and random.
 
 A file of only 0s will crash on overflow as it does an infinite recursion downwards. I don't realistically see this being a problem so I didnt limit it.
 

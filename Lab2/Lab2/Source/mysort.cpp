@@ -16,11 +16,11 @@
 #include "include/cxxopts.hpp"
 #include "include/locks.hpp"
 
-#define FORK_JOIN 1
-#define BUCKET 0
-#define ALG_UNDEFINED                                                           \
-    10 // arbitrary number. No inclined to use negative numbers at this time to \
-        // avoid potential unsigned/signed cross-pollination
+#define FORK_JOIN       1
+#define BUCKET          0
+#define ALG_UNDEFINED   10
+    // arbitrary number. No inclined to use negative numbers at this time to
+    // avoid potential unsigned/signed cross-pollination
 
 // Played with this number a bit but it'll depend on the machine so I'm not too
 // woried about the +/-
@@ -33,8 +33,8 @@ static pthread_t* threads;
 static int NUM_THREADS = 0;
 static struct timespec start, end;
 
-LockBox* lockBox = nullptr;
-LockType ltype = LOCK_TYPE_INVALID;
+static LockBox* lockBox = nullptr;
+static LockType ltype = LOCK_TYPE_INVALID;
 
 static std::multiset<int>* landfill = nullptr;
 
@@ -49,27 +49,12 @@ typedef struct {
     int lo, hi, tid;
 } thread_bvec;
 
-void global_init()
-{
-    threads = static_cast<pthread_t*>(malloc(NUM_THREADS * sizeof(pthread_t)));
-}
-
+void global_init() { threads = static_cast<pthread_t*>(malloc(NUM_THREADS * sizeof(pthread_t))); }
 void global_bs_init() { landfill = new std::multiset<int>(); }
-
-void locks_init()
-{
-    // ltype MUST be set before calling.
-    // Otherwise it will do nothing.
-    lockBox = new LockBox(ltype);
-}
+void locks_init() { lockBox = new LockBox(ltype); }
 
 void locks_cleanup() { delete lockBox; }
-
-void global_cleanup()
-{
-    free(threads);
-}
-
+void global_cleanup() { free(threads); }
 void global_bs_cleanup() { delete landfill; }
 
 // semi-intelligently find the partition index to divvy up the work load
@@ -306,10 +291,10 @@ int main(int argc, char* argv[])
         "n, name", "My name (for grading purposes)", cxxopts::value<bool>())(
         "i,input", "input file name", cxxopts::value<std::string>(), "FILE")(
         "o, output", "Output file name", cxxopts::value<std::string>(), "FILE")(
-        "t, threads", "Number of threads to be used", cxxopts::value<int>())(
-        "b, bar", "Barrier type to use.\nHowever no barriers were used in this so run counter to test.", cxxopts::value<std::string>())(
-        "l, lock", "Lock type to use.\nOptions are: <tas, ttas, ticket, mcs, pthread, aflag>", cxxopts::value<std::string>())(
-        "alg", "Algorithm to sort with", cxxopts::value<std::string>())(
+        "t, threads", "Number of threads to be used", cxxopts::value<int>(), "NUM_THREADS")(
+        "b, bar", "Barrier type to use.\nHowever no barriers were used in this so run counter to test.", cxxopts::value<std::string>(),"<sense, pthread>")(
+        "l, lock", "Lock type to use.", cxxopts::value<std::string>(),"<tas, ttas, ticket, mcs, pthread, aflag>")(
+        "alg", "Algorithm to sort with", cxxopts::value<std::string>(), "<fj, bucket>")(
         "h, help", "Display help options");
 
     std::string ofile = "";
@@ -547,7 +532,7 @@ int main(int argc, char* argv[])
             for (std::vector<int>::const_iterator i = file_print.begin();
                  i != file_print.end(); i++) {
                 outfile << *i << std::endl;
-                std::cout << *i << std::endl; // comment to remove/add terminal print
+//                std::cout << *i << std::endl; // comment to remove/add terminal print
             }
         } catch (std::exception& e) {
             std::cout << e.what();
