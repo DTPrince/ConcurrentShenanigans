@@ -1,6 +1,6 @@
 // Derek Prince
 // ECEN - 5033 Concurrent Programming
-// Lab 2 - Various Locks and Barriers used on Bucketsrot
+// Lab 2 - Various Locks and Barriers used on a counter microbench
 // Due 10/16/19
 
 #include <atomic>
@@ -27,11 +27,11 @@ static struct timespec start, end;
 
 static std::atomic<int> threads_active;
 
-LockBox* lockBox = nullptr;
-LockType ltype = LOCK_TYPE_INVALID;
+static LockBox* lockBox = nullptr;
+static LockType ltype = LOCK_TYPE_INVALID;
 
-BarrierBox* barrierBox = nullptr;
-BarrierType btype = BARRIER_TYPE_INVALID;
+static BarrierBox* barrierBox = nullptr;
+static BarrierType btype = BARRIER_TYPE_INVALID;
 
 void global_init(){
     threads = static_cast<pthread_t*>(malloc(NUM_THREADS * sizeof(pthread_t)));

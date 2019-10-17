@@ -3,11 +3,12 @@
 
 #include "include/barriers.hpp"
 
-
+// --- Barrier Interface ---
 void BarrierInterface::wait(){}
 
 BarrierInterface::~BarrierInterface(){}
 
+// --- Pthread Barrier ---
 Barrier::Barrier(int n){
     num_threads = n;
     pthread_barrier_init(&this->barrier, nullptr, num_threads);
@@ -18,16 +19,13 @@ void Barrier::wait(){
 }
 
 
+// --- SenseReverse_Barrier ---
 thread_local bool SenseReverse_Barrier::my_sense;
 SenseReverse_Barrier::SenseReverse_Barrier(int n){
     num_threads = n;
 }
 
 void SenseReverse_Barrier::wait(){
-//    if (this->my_sense == 0)
-//        this->my_sense = 1;
-//    else
-//        this->my_sense = 0;
     this->my_sense = !this->my_sense;
 
     int count_cpy = count.fetch_add(1);
@@ -37,10 +35,12 @@ void SenseReverse_Barrier::wait(){
         sense.store(this->my_sense);
     }
     else{
-        while(sense.load() != this->my_sense);    //my_sense might be a bit not right
+        while(sense.load() != this->my_sense);
     }
 }
 
+
+// -- BarrierBox ---
 BarrierBox::BarrierBox(BarrierType barrierType, int n){
     btype = barrierType;
     switch (btype){
