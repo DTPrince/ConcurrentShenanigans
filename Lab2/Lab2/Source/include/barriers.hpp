@@ -29,6 +29,8 @@ public:
     std::atomic<int> count;
     std::atomic<int> sense;
 
+    thread_local static bool my_sense;
+
     SenseReverse_Barrier(int n = 0);
 
     void wait();

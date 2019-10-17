@@ -17,25 +17,27 @@ void Barrier::wait(){
     pthread_barrier_wait(&this->barrier);
 }
 
+
+thread_local bool SenseReverse_Barrier::my_sense;
 SenseReverse_Barrier::SenseReverse_Barrier(int n){
     num_threads = n;
 }
 
-inline void SenseReverse_Barrier::wait(){
-    thread_local bool my_sense = 0;
-    if (my_sense == 0)
-        my_sense = 1;
-    else
-        my_sense = 0;
+void SenseReverse_Barrier::wait(){
+//    if (this->my_sense == 0)
+//        this->my_sense = 1;
+//    else
+//        this->my_sense = 0;
+    this->my_sense = !this->my_sense;
 
     int count_cpy = count.fetch_add(1);
 
-    if (count_cpy == num_threads){
-        count.store(0, RELAXED);
-        sense.store(my_sense);
+    if (count_cpy == num_threads - 1){
+        count.store(0);
+        sense.store(this->my_sense);
     }
     else{
-        while(sense.load() != my_sense);    //my_sense might be a bit not right
+        while(sense.load() != this->my_sense);    //my_sense might be a bit not right
     }
 }
 

@@ -24,8 +24,10 @@ typedef enum LockType{
 // As I'm stubborn, it will now be grandfathered
 // into the other acquire() fields. Will be overloaded.
 typedef struct MCS_Node{
-    std::atomic<MCS_Node *> next;
-    std::atomic<bool> locked;    // TODO: this probably has to become atomic.
+    MCS_Node *next = nullptr;
+    bool locked;
+
+    // could use some cache-line padding.
 } MCS_Node;
 
 // --- LockInterface ---
@@ -98,6 +100,9 @@ public:
 class Mutex_Lock : LockInterface{
 public:
     pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+    Mutex_Lock();
+    ~Mutex_Lock();
 
     void acquire();
     void release();

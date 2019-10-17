@@ -65,74 +65,70 @@ void Ticket_Lock::release(){
 thread_local MCS_Node MCS_Lock::qnode;
 
 MCS_Lock::MCS_Lock(){
-//    this->qnode.next.store(nullptr);
     tail.store(nullptr);
 }
 
 void MCS_Lock::acquire(){
     // place new node at end of queue and store address of previous last node
     // for checking and also to update next-> ptr
-/*
-    MCS_Node *prev = tail.load();
-    qnode->next.store(nullptr);    // I believe this is redundant but I want to force it for
-                                        // thread reuse. Small steps.
-
-    while (!tail.compare_exchange_weak(prev, qnode)){
-        prev = tail.load();
-    }
-    // recall that prev took the address of the last node.
-    // meaning if it is null then there is no last node and the queue is empty.
-    if (prev != nullptr){
-        qnode->locked.store(true);
-
-        prev->next.store(qnode);
-
-        while (qnode->locked.load()){   // wait for the lock to free, This is done from
-                                      // `prev->next.locked = true;` in MCS_Lock::release();
-
-        }
-    }
-*/
     MCS_Node *prev = tail.exchange(&this->qnode);
 
-    if (prev != nullptr){
-        this->qnode.locked.store(true);
-        prev->next.store(&this->qnode);
 
-        while(this->qnode.locked.load()){
-            // cpu_relax comes from ... and mfukar
+    if (prev != nullptr){
+        this->qnode.locked = true;
+        prev->next = &this->qnode;
+
+        // wait for lock to free from MCS_Lock::release();
+        while(this->qnode.locked){
+            // cpu_relax comes from ifknot and mfukar suggesting using it. See credits.
             cpu_relax();
         }
     }
 
 }
 
+// Over-commented for my sanity
 void MCS_Lock::release(){
     // https://libfbp.blogspot.com/2018/01/c-mellor-crummey-scott-mcs-lock.html
 
-    if (this->qnode.next.load() == nullptr){
+    // check if there is a next node waiting
+    if (this->qnode.next == nullptr){
+        // Check to see if this node is the last one waiting and return if so
         MCS_Node *temp = &this->qnode;
+        // 4-argument compare_exchange_strong required to use nullptr argument
         if (tail.compare_exchange_strong(temp, nullptr, REL, RELAXED)){
             return;
         }
-        while (this->qnode.next.load() == nullptr);
+        // Otherwise the next node is still being set up so wait for it
+        while (this->qnode.next == nullptr);
     }
 
-    this->qnode.next.load()->locked.store(false);
+    // Signal next node that the lock is free
+    this->qnode.next->locked = false;
 
-    this->qnode.next.store(nullptr);
+    // This line makes a world of a difference
+    this->qnode.next = nullptr;
 }
 
 
 // --- Mutex_Lock ---
+Mutex_Lock::Mutex_Lock(){
+    lock = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_init(&lock, nullptr);
+}
+
+Mutex_Lock::~Mutex_Lock(){
+    pthread_mutex_destroy(&lock);
+}
+
 void Mutex_Lock::acquire(){
     // Does wait for lock though it took some convincing
     // to remind me
-    pthread_mutex_lock(&lock);
+    pthread_mutex_lock(&this->lock);
 }
 
 void Mutex_Lock::release(){
-    pthread_mutex_lock(&lock);
+    pthread_mutex_unlock(&this->lock);
 }
 
 

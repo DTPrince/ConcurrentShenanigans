@@ -1,8 +1,7 @@
+//
+
 #ifndef CPU_RELAX_HPP
 #define CPU_RELAX_HPP
-
-
-
 
 inline static void cpu_relax() {
 //        #if (COMPILER == MVCC)
