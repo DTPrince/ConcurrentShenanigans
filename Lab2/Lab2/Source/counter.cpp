@@ -57,7 +57,7 @@ void* lock_counter(void* thread_id){
     thread_local int tid = threads_active.fetch_add(1);
     thread_local int i = 0;
 
-    for (i = 0; i < iterations; i++){
+    for (i = 0; i < iterations*NUM_THREADS; i++){
         if (i%NUM_THREADS == tid){
             lockBox->acquire();
             cntr++;
@@ -71,7 +71,7 @@ void* barrier_counter(void* thread_id){
     thread_local int tid = threads_active.fetch_add(1);
     thread_local int i = 0;
 
-    for (i = 0; i < iterations; i++){
+    for (i = 0; i < iterations*NUM_THREADS; i++){
         if (i%NUM_THREADS == tid){
             cntr++;
         }
