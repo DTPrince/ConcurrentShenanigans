@@ -7,15 +7,13 @@
 
 
 int main(int argc, char* argv[]) {
-    std::cout << "Hello, World!" << std::endl;
-
-    cxxopts::Options options(argv[0], "Text parse and sort for lab 2.");
+    cxxopts::Options options(argv[0], "Concurrent Skip List final project");
 
     std::string input, output;
 
     options.add_options()(
             "n, name", "My name (for grading purposes)", cxxopts::value<bool>())(
-            "i,input", "input file name", cxxopts::value<std::string>(), "FILE")(
+            "i, input", "input file name", cxxopts::value<std::string>(), "FILE")(
             "o, output", "Output file name", cxxopts::value<std::string>(), "FILE")(
             "t, threads", "Number of threads to be used", cxxopts::value<int>(), "NUM_THREADS")(
             "h, help", "Display help options");
@@ -69,6 +67,8 @@ int main(int argc, char* argv[]) {
         return -1;
     }
     // -- END Opt parse block ---
+
+
 
     return 0;
 
