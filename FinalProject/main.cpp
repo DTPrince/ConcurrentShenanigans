@@ -7,7 +7,8 @@
 
 
 int main(int argc, char* argv[]) {
-    cxxopts::Options options(argv[0], "Concurrent Skip List final project");
+    cxxopts::Options options(argv[0], "Concurrent Skip List final project implemented with"
+                                      " fine-grained hand-over-hand locking");
 
     std::string input, output;
 

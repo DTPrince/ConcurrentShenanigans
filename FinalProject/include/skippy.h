@@ -6,8 +6,8 @@
 #define SKIPPY_H
 
 #include <vector>
-
-#include <bits/stdc++.h>
+#include <pthread.h>
+#include <stdlib.h>
 
 using namespace std;
 
@@ -18,12 +18,15 @@ public:
     // Array is used to store levels.
     SLNode ** next;
 
-    // Built around ints because this isn't storing any real data
-    // Realistically it should be done with templates but there is no
-    // reason to add that complexity for this example
+    // Built around ints because this isn't storing any real data,
+    // just marking accesses
     int key;
-    // T key;
+    // T data;
 
+    // abstract out so it is easily callable from whatever nodes.
+    // returns success values
+    bool lock();
+    bool unlock();
     SLNode(int, int);
 };
 
@@ -44,8 +47,9 @@ public:
 
 
     void insert(int);
+    SLNode * get(int);
     void createnode();
-    int fetch(int*);
+
     int get_randomLevel();
 
     static SLNode * createSLNode(int, int);
