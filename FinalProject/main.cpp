@@ -1,9 +1,11 @@
 #include <iostream>
 #include <exception>
 #include <pthread.h>
-
+#include <string>
+#include <fstream>
 
 #include "include/cxxopts.hpp"
+#include "include/skippy.h"
 
 
 int main(int argc, char* argv[]) {
@@ -67,10 +69,43 @@ int main(int argc, char* argv[]) {
         std::cout << e.what() << std::endl;
         return -1;
     }
-    // -- END Opt parse block ---
+    // --- END Opt parse block ---
 
+    // --- Gather file data ---
+    std::ifstream infile(ifile);
 
+    std::vector<int> file_contents;
+
+    if (infile.is_open())
+    {
+        std::string temp;
+        // populate vector w/ contents
+        while (infile >> temp)
+        {
+            // Attempt to convert str to int, catch errors
+            try
+            {
+                file_contents.push_back(atoi(temp.c_str()));
+            }
+            catch (std::exception& e)
+            {
+                std::cout << e.what();
+            }
+        }
+    }
+    else
+        std::cout << "File " << ifile << " did not open.";
+
+    // This is just in case the output file is the same as the input
+    infile.close();
+
+    // --- Insert items ---
+    Skippy skippy(3, 0.5);
+//    skippy.insert(5);
+    for (auto i = file_contents.begin(); i < file_contents.end(); i++) {
+        skippy.insert(*i);
+    }
+    skippy.display();
 
     return 0;
-
 }

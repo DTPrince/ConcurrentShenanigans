@@ -3,6 +3,7 @@
 //
 
 #include "skippy.h"
+#include <iostream>
 
 SLNode::SLNode(int k, int lvl) {
     this->key = k;
@@ -33,12 +34,12 @@ Skippy::Skippy(int mlevel, float p) {
  * this->portion is returned. So based on probability.
  */
 int Skippy::get_randomLevel(){
-    float r_num = rand()/RAND_MAX;
+    float r_num = (float)rand()/RAND_MAX;
     int lvl = 0;
     while (r_num < portion && lvl < max_level){
         lvl++;
         // roll again
-        r_num = rand()/RAND_MAX;
+        r_num = (float)rand()/RAND_MAX;
     }
     return lvl;
 }
@@ -104,7 +105,7 @@ void Skippy::insert(int key) {
         // If the random level is a greater depth than the current depth
         // then the head needs to be updated to point to the new node
         if (rand_level > c_level){
-            for (int i = c_level + 1; i < rand_level; i--){
+            for (int i = c_level + 1; i < rand_level + 1; i++){
                 stitcher[i] = head;
             }
             // There is a new level depth now.
@@ -118,7 +119,7 @@ void Skippy::insert(int key) {
         // recall that 'stitcher' was left in the position
         // just prior to insert point after accumulating
         // all previous pointers.
-        for (int i = 0; i < rand_level; i++){
+        for (int i = 0; i <= rand_level; i++){
             i_node->next[i] = stitcher[i]->next[i];
             stitcher[i]->next[i] = i_node;
         }
@@ -148,4 +149,18 @@ std::vector<int> Skippy::get_range(int lower, int upper) {
     }
 
     return range;
+}
+
+// Just iterate over list but hit every node from bottom up
+void Skippy::display() {
+    std::cout << "Skip list contents\n";
+    for (int i = 0; i <= c_level; i++) {
+        SLNode * slnode = head->next[i];
+        std::cout << "Level: " << i << " : ";
+        while (slnode != nullptr){
+            std::cout << slnode->key << " ";
+            slnode = slnode->next[i];
+        }
+        std::cout << std::endl;
+    }
 }

@@ -45,6 +45,7 @@ public:
 
     std::vector<int> get_range(int, int);
 
+    void display(); // for debugging, really.
 
     void insert(int);
     SLNode * get(int);
