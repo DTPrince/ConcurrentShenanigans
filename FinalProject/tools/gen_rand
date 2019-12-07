@@ -1,0 +1,10 @@
+#!/bin/bash
+if [ "$#" -ne 2 ]; then
+    echo "usage: random <count> <max>"
+    exit
+fi
+i="$1"
+until [ $i -lt 1 ]; do
+    echo $(($RANDOM % $2))
+    ((i--))
+done
