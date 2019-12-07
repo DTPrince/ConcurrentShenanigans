@@ -64,6 +64,7 @@ SLNode * Skippy::createSLNode(int k, int mLvl){
  *                                      of next changing between check and lock by another thread)
  * Unlock head, move next, lock next, check next
  * repeat. (loop until next[i]->key > key) -- code already exists
+ *
  */
 
 // I would like to not have to carry around a 'prev' variable for locks if possible.
@@ -71,8 +72,10 @@ SLNode * Skippy::createSLNode(int k, int mLvl){
 void Skippy::insert(int key) {
     // traversal node to find insert point
     SLNode * crawler = head;
-
-    // TODO: if previous node watch is required for locking then add it here
+    // Tracks previous node to manage hand-over-hand locking
+    SLNode * previous = nullptr;
+    // acquire lock or stall thread while waiting
+    while (crawler->aflag.test_and_set()) {}
 
     // must be max level because there is
     // no promise that we won't reach the
@@ -89,14 +92,27 @@ void Skippy::insert(int key) {
         while (crawler->next[i] != nullptr &&
                crawler->next[i]->key < key) {
             // update 'forwarding' pointers as search progresses
+
+            // clear previous flag
+            if (previous != nullptr)
+                previous->aflag.clear();
+            previous = crawler;
             crawler = crawler->next[i];
+            // acquire next flag
+            while (crawler->aflag.test_and_set()) {}
         }
         stitcher[i] = crawler;
     }
 
     // Shifting crawler forward after finding node means it can now
     // acceptably be nullptr and is no longer safe to reference without check
+    if (previous != nullptr)
+        previous->aflag.clear();
+    previous = crawler;
     crawler = crawler->next[0];
+    // acquire next flag
+    if (crawler != nullptr)
+        while (crawler->aflag.test_and_set()) {}
 
     // Here check if (first cond) we are at the end OR (second cond) the key has already been inserted
     if (crawler == nullptr || crawler->key != key){
@@ -124,27 +140,34 @@ void Skippy::insert(int key) {
             stitcher[i]->next[i] = i_node;
         }
     }
+
+    // Make sure no locks are held on release.
+    // This has to be called here in case of fisrt insert/append to end
+    if (previous != nullptr)
+        previous->aflag.clear();
+    if (crawler != nullptr)
+        crawler->aflag.clear();
 }
 
 // This function will start in the same way as insert() by finding the node and then
 // moving along the base row, accumulating the integers in a vector before returning.
 // Results are strictly: lower <= results <= max.
-std::vector<int> Skippy::get_range(int lower, int upper) {
+std::vector<int>* Skippy::get_range(int lower, int upper) {
     SLNode * crawler = head;
 
     for (int i = c_level; i >= 0; i--) {
         while (crawler->next[i] != nullptr &&
-               crawler->next[i]->key <= lower) {
+               crawler->next[i]->key < lower) {
             crawler = crawler->next[i];
         }
     }
     crawler = crawler->next[0];
-    std::vector<int> range;
-    range.reserve(upper - lower);
+    std::vector<int> * range = new std::vector<int>;
+    range->reserve(upper - lower);
 
     // crawler is now below 'lower' on thew base row. Just accumulate until next[0]->key > upper
-    while (crawler->next[0]->key < upper){
-        range.push_back(crawler->key);
+    while (crawler->key < upper || crawler->next == nullptr){
+        range->push_back(crawler->key);
         crawler = crawler->next[0];
     }
 

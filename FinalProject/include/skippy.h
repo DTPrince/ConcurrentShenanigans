@@ -26,6 +26,8 @@ public:
 
     // Might as well use the class created for this exact purpose
     std::atomic_flag aflag = ATOMIC_FLAG_INIT;
+    // pthreads shared mutex here. Or something like that. Maybe an array of read bools, actually. might still be faster
+    // Allow 8 readers or something
 
     SLNode(int, int);
 };
@@ -43,7 +45,7 @@ public:
     // TODO: handle head insertion/removal
     SLNode * head;
 
-    std::vector<int> get_range(int, int);
+    std::vector<int> * get_range(int, int);
 
     void display(); // for debugging, really.
 

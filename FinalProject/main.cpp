@@ -7,6 +7,13 @@
 #include "include/cxxopts.hpp"
 #include "include/skippy.h"
 
+static pthread_t* threads;
+static int NUM_THREADS = 0;
+static struct timespec start, end;
+
+// Threads initialize and cleanup
+void global_init() { threads = static_cast<pthread_t*>(malloc(NUM_THREADS * sizeof(pthread_t))); }
+void global_cleanup() { free(threads); }
 
 int main(int argc, char* argv[]) {
     cxxopts::Options options(argv[0], "Concurrent Skip List final project implemented with"
@@ -53,7 +60,7 @@ int main(int argc, char* argv[]) {
             std::cout << "No input file given" << std::endl;
             return (0);
         }
-         int NUM_THREADS;
+//         int NUM_THREADS;
         // Extract thread number information
         if (result.count("threads")) {
             NUM_THREADS = result["t"].as<int>();
@@ -100,12 +107,25 @@ int main(int argc, char* argv[]) {
     infile.close();
 
     // --- Insert items ---
+    global_init();
+
     Skippy skippy(3, 0.5);
-//    skippy.insert(5);
+
     for (auto i = file_contents.begin(); i < file_contents.end(); i++) {
         skippy.insert(*i);
     }
+
+    global_cleanup();
+
+    // Print. Or not.
     skippy.display();
+
+    std::vector<int> * r = skippy.get_range(2, 12);
+    std::cout << "In range {2,12}: ";
+    for (auto i = r->begin(); i < r->end(); i++){
+        std::cout << *i << " ";
+    }
+
 
     return 0;
 }
