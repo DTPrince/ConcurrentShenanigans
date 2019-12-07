@@ -1,7 +1,7 @@
 #include <iostream>
 #include <exception>
 #include <pthread.h>
-#include <atomic>
+
 
 #include "include/cxxopts.hpp"
 

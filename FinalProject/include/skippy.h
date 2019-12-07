@@ -7,7 +7,8 @@
 
 #include <vector>
 #include <pthread.h>
-#include <stdlib.h>
+#include <cstdlib>
+#include <atomic>
 
 using namespace std;
 
@@ -23,10 +24,9 @@ public:
     int key;
     // T data;
 
-    // abstract out so it is easily callable from whatever nodes.
-    // returns success values
-    bool lock();
-    bool unlock();
+    // Might as well use the class created for this exact purpose
+    std::atomic_flag aflag = ATOMIC_FLAG_INIT;
+
     SLNode(int, int);
 };
 
@@ -48,11 +48,9 @@ public:
 
     void insert(int);
     SLNode * get(int);
-    void createnode();
-
     int get_randomLevel();
-
     static SLNode * createSLNode(int, int);
+
     Skippy(int, float); // max level and fraction of elements that
                         // share an upper level
 };

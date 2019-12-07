@@ -49,9 +49,29 @@ SLNode * Skippy::createSLNode(int k, int mLvl){
     return slnode;
 }
 
+/*
+ * Skritchity-skratchity
+ * Lock must be acquired before any modifications
+ * Locks on both the previous and current node must be held
+ * before any changes
+ * ***SO LONG AS*** there is no ->prev pointer, the ->next lock need not be held.
+ * as you cannot change the previous one without acquiring the lock
+ *
+ * Steps to add something:
+ * Lock head, lock next, check next. (there might exist a solution to only lock after checking
+ *                                      but I do not want to have to mess with the possibility
+ *                                      of next changing between check and lock by another thread)
+ * Unlock head, move next, lock next, check next
+ * repeat. (loop until next[i]->key > key) -- code already exists
+ */
+
+// I would like to not have to carry around a 'prev' variable for locks if possible.
+// Hoping to just use ->next[i] as a reverse-previous access.
 void Skippy::insert(int key) {
     // traversal node to find insert point
     SLNode * crawler = head;
+
+    // TODO: if previous node watch is required for locking then add it here
 
     // must be max level because there is
     // no promise that we won't reach the
