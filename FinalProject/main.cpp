@@ -15,6 +15,29 @@ static struct timespec start, end;
 void global_init() { threads = static_cast<pthread_t*>(malloc(NUM_THREADS * sizeof(pthread_t))); }
 void global_cleanup() { free(threads); }
 
+// Small structure for passing information around in threads
+typedef struct {
+    Skippy *skip;
+    int key;
+    int low = -1;
+    int high = -1;
+} ThreadCommunication;
+
+// Forwarder to call class function without doing the reference/dereference void * bullshit
+// as it was cleaner than every other implementation aside from ripping up all my code
+// and restructuring the entire class. Which wasn't even guaranteed to work
+static void * pinsert_helper(void * arg){
+    ThreadCommunication *tc = (ThreadCommunication *)arg;
+    tc->skip->pinsert(tc->key);
+    pthread_exit(nullptr);
+}
+
+static void * pget_range_helper(void * arg) {
+    ThreadCommunication *tc = (ThreadCommunication *)arg;
+    std::vector<int> * range_vec = tc->skip->pget_range(tc->low, tc->high);
+    pthread_exit(nullptr);
+}
+
 int main(int argc, char* argv[]) {
     cxxopts::Options options(argv[0], "Concurrent Skip List final project implemented with"
                                       " fine-grained hand-over-hand locking");
@@ -110,9 +133,22 @@ int main(int argc, char* argv[]) {
     global_init();
 
     Skippy skippy(3, 0.5);
+    ThreadCommunication tc;
+    tc.skip = &skippy;
 
-    for (auto i = file_contents.begin(); i < file_contents.end(); i++) {
-        skippy.insert(*i);
+    // Sequential insert only
+//    for (auto i = file_contents.begin(); i < file_contents.end(); i++) {
+//        skippy.insert(*i);
+//    }
+
+
+    int ret = -1;
+    for (int i = 0; i < file_contents.size(); i++) {
+        tc.key = file_contents[i];
+        ret = pthread_create(&threads[i], nullptr, &pinsert_helper, &tc);
+    }
+    for (int i = 0; i < file_contents.size(); i++) {
+        ret = pthread_join(threads[i], nullptr);
     }
 
     global_cleanup();

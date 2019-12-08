@@ -42,16 +42,20 @@ public:
     // node.
     float portion;
 
-    // TODO: handle head insertion/removal
     SLNode * head;
-
-    std::vector<int> * get_range(int, int);
 
     void display(); // for debugging, really.
 
     void insert(int);
+    std::vector<int> * get_range(int, int);
+    int pinsert(int);
+
+    std::vector<int>* pget_range(int, int);
+
     SLNode * get(int);
+
     int get_randomLevel();
+
     static SLNode * createSLNode(int, int);
 
     Skippy(int, float); // max level and fraction of elements that

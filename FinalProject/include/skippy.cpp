@@ -72,6 +72,64 @@ SLNode * Skippy::createSLNode(int k, int mLvl){
 void Skippy::insert(int key) {
     // traversal node to find insert point
     SLNode * crawler = head;
+
+    // must be max level because there is
+    // no promise that we won't reach the
+    // max level on insert
+    SLNode * stitcher[max_level + 1];   // holds intermediary values to update with
+    for (int i = 0; i < max_level + 1; i ++){
+        stitcher[i] = nullptr;
+    }
+
+    // Now to find the location desired to insert between or at the end.
+    // Inserting first node is handled as inserting on end of head, not as
+    // a replacement for it.
+    for (int i = c_level; i >= 0; i--) {
+        while (crawler->next[i] != nullptr &&
+               crawler->next[i]->key < key) {
+            // update 'forwarding' pointers as search progresses
+            crawler = crawler->next[i];
+        }
+        stitcher[i] = crawler;
+    }
+
+    // Shifting crawler forward after finding node means it can now
+    // acceptably be nullptr and is no longer safe to reference without check
+    crawler = crawler->next[0];
+
+    // Here check if (first cond) we are at the end OR (second cond) the key has already been inserted
+    if (crawler == nullptr || crawler->key != key){
+        int rand_level = get_randomLevel();
+
+        // If the random level is a greater depth than the current depth
+        // then the head needs to be updated to point to the new node
+        if (rand_level > c_level){
+            for (int i = c_level + 1; i < rand_level + 1; i++){
+                stitcher[i] = head;
+            }
+            // There is a new level depth now.
+            c_level = rand_level;
+        }
+
+        // Now that the structure has been massaged into shape, create new node proper
+        SLNode * i_node = createSLNode(key, rand_level);
+
+        // insert by adjusting surrounding pointers.
+        // recall that 'stitcher' was left in the position
+        // just prior to insert point after accumulating
+        // all previous pointers.
+        for (int i = 0; i <= rand_level; i++){
+            i_node->next[i] = stitcher[i]->next[i];
+            stitcher[i]->next[i] = i_node;
+        }
+    }
+}
+
+int Skippy::pinsert(int key) {
+//    int key = *(int *)k;
+
+    // traversal node to find insert point
+    SLNode * crawler = head;
     // Tracks previous node to manage hand-over-hand locking
     SLNode * previous = nullptr;
     // acquire lock or stall thread while waiting
@@ -143,10 +201,12 @@ void Skippy::insert(int key) {
 
     // Make sure no locks are held on release.
     // This has to be called here in case of fisrt insert/append to end
-    if (previous != nullptr)
-        previous->aflag.clear();
+//    if (previous != nullptr)
+    previous->aflag.clear();
     if (crawler != nullptr)
         crawler->aflag.clear();
+
+    return 0;
 }
 
 // This function will start in the same way as insert() by finding the node and then
@@ -172,6 +232,36 @@ std::vector<int>* Skippy::get_range(int lower, int upper) {
     }
 
     return range;
+}
+
+// TODO: add actual locks to this. *Should* be easier than insert, though similar
+// There is an argument to be made to lock the whole chain of values while accumulating
+// them but I do not think the benefits outweigh the cost. There would never be a
+// promise that the returned range is valid for any time past when it is returned.
+// More to the point, I think it is out of the scope of comparing hand over hand
+// locking on a list and left to a complete implementation of a skip list to be
+// used on a real work-load bearing server.
+std::vector<int>* Skippy::pget_range(int lower, int upper) {
+
+    SLNode * crawler = head;
+
+    for (int i = c_level; i >= 0; i--) {
+        while (crawler->next[i] != nullptr &&
+               crawler->next[i]->key < lower) {
+            crawler = crawler->next[i];
+        }
+    }
+    crawler = crawler->next[0];
+    auto * range = new std::vector<int>;
+    range->reserve(upper - lower);
+
+    // crawler is now below 'lower' on thew base row. Just accumulate until next[0]->key > upper
+    while (crawler->key < upper || crawler->next == nullptr){
+        range->push_back(crawler->key);
+        crawler = crawler->next[0];
+    }
+
+    pthread_exit((void *)range);
 }
 
 // Just iterate over list but hit every node from bottom up
