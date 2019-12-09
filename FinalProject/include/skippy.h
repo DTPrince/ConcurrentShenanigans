@@ -51,6 +51,7 @@ public:
     void insert(int);
     std::vector<int> * get_range(int, int);
     int pinsert(int);
+    void * tpinsert(void *);
 
     std::vector<int>* pget_range(int, int);
 

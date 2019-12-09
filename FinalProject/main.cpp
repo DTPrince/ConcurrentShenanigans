@@ -4,6 +4,10 @@
 #include <string>
 #include <fstream>
 
+#include <sys/types.h>
+#include <syscall.h>
+#include <unistd.h>
+
 #include "include/cxxopts.hpp"
 #include "include/skippy.h"
 
@@ -33,6 +37,8 @@ ThreadCommunication tc;
 // as it was cleaner than every other implementation aside from ripping up all my code
 // and restructuring the entire class. Which wasn't even guaranteed to work
 static void * pinsert_helper(void * arg){
+    pid_t x = syscall(__NR_gettid);
+
     int * key = (int*)arg;
     int keyval = *key;
 //    test.push_back(keyval);
@@ -148,51 +154,62 @@ int main(int argc, char* argv[]) {
     tc.skip = &skippy;
     int ret = -1;
 
-    ThreadCommunication tc0;
-    tc0.skip = &skippy;
-    tc0.key = 0;
-    ThreadCommunication tc1;
-    tc1.skip = &skippy;
-    tc1.key = 1;
-    ThreadCommunication tc2;
-    tc2.skip = &skippy;
-    tc2.key = 2;
-    ThreadCommunication tc3;
-    tc3.skip = &skippy;
-    tc3.key = 3;
-    ThreadCommunication tc4;
-    tc4.skip = &skippy;
-    tc4.key = 4;
-    ThreadCommunication tc5;
-    tc5.skip = &skippy;
-    tc5.key = 5;
-    ThreadCommunication tc6;
-    tc6.skip = &skippy;
-    tc6.key = 6;
-    ThreadCommunication tc7;
-    tc7.skip = &skippy;
-    tc7.key = 7;
-    ThreadCommunication tc8;
-    tc8.skip = &skippy;
-    tc8.key = 8;
-    ThreadCommunication tc9;
-    tc9.skip = &skippy;
-    tc9.key = 9;
+//    ThreadCommunication tc0;
+//    tc0.skip = &skippy;
+//    tc0.key = 0;
+//    ThreadCommunication tc1;
+//    tc1.skip = &skippy;
+//    tc1.key = 1;
+//    ThreadCommunication tc2;
+//    tc2.skip = &skippy;
+//    tc2.key = 2;
+//    ThreadCommunication tc3;
+//    tc3.skip = &skippy;
+//    tc3.key = 3;
+//    ThreadCommunication tc4;
+//    tc4.skip = &skippy;
+//    tc4.key = 4;
+//    ThreadCommunication tc5;
+//    tc5.skip = &skippy;
+//    tc5.key = 5;
+//    ThreadCommunication tc6;
+//    tc6.skip = &skippy;
+//    tc6.key = 6;
+//    ThreadCommunication tc7;
+//    tc7.skip = &skippy;
+//    tc7.key = 7;
+//    ThreadCommunication tc8;
+//    tc8.skip = &skippy;
+//    tc8.key = 8;
+//    ThreadCommunication tc9;
+//    tc9.skip = &skippy;
+//    tc9.key = 9;
 
-    ret = pthread_create(&threads[0], nullptr, &pinsert_helper, &tc0.key);
-    ret = pthread_create(&threads[1], nullptr, &pinsert_helper, &tc1.key);
-    ret = pthread_create(&threads[2], nullptr, &pinsert_helper, &tc2.key);
-    ret = pthread_create(&threads[3], nullptr, &pinsert_helper, &tc3.key);
-    ret = pthread_create(&threads[4], nullptr, &pinsert_helper, &tc4.key);
-    ret = pthread_create(&threads[5], nullptr, &pinsert_helper, &tc5.key);
-    ret = pthread_create(&threads[6], nullptr, &pinsert_helper, &tc6.key);
-    ret = pthread_create(&threads[7], nullptr, &pinsert_helper, &tc7.key);
-    ret = pthread_create(&threads[8], nullptr, &pinsert_helper, &tc8.key);
-    ret = pthread_create(&threads[9], nullptr, &pinsert_helper, &tc9.key);
+//    ret = pthread_create(&threads[0], nullptr, &pinsert_helper, &tc0.key);
+//    ret = pthread_create(&threads[1], nullptr, &pinsert_helper, &tc1.key);
+//    ret = pthread_create(&threads[2], nullptr, &pinsert_helper, &tc2.key);
+//    ret = pthread_create(&threads[3], nullptr, &pinsert_helper, &tc3.key);
+//    ret = pthread_create(&threads[4], nullptr, &pinsert_helper, &tc4.key);
+//    ret = pthread_create(&threads[5], nullptr, &pinsert_helper, &tc5.key);
+//    ret = pthread_create(&threads[6], nullptr, &pinsert_helper, &tc6.key);
+//    ret = pthread_create(&threads[7], nullptr, &pinsert_helper, &tc7.key);
+//    ret = pthread_create(&threads[8], nullptr, &pinsert_helper, &tc8.key);
+//    ret = pthread_create(&threads[9], nullptr, &pinsert_helper, &tc9.key);
+
+    int insert[NUM_THREADS];
+    int tid = 0;
+    for (auto i = file_contents.begin(); i < file_contents.end(); i++) {
+        insert[tid] = *i;
+        ret = pthread_create(&threads[tid], nullptr, &pinsert_helper, &insert[tid]);
+        if (ret != 0) {
+            std::cout << "Error on thread " << tid << " create.\n";
+        }
+        tid++;
+    }
 
     for (int i = 0; i < 10; i++) {
         ret = pthread_join(threads[i], nullptr);
-        if (ret != 0){
+        if (ret != 0) {
             std::cout << "Error on thread " << i << " join.\n";
         }
     }
@@ -202,11 +219,6 @@ int main(int argc, char* argv[]) {
     // Print. Or not.
     skippy.display();
 
-    std::cout << "Test vec:\n";
-    for (auto i = test.begin(); i< test.end(); i++){
-        std::cout << *i << " ";
-    }
-    std::cout << "\n";
 //    std::vector<int> * r = skippy.get_range(2, 12);
 //
 //    std::cout << "In range {2,12}: ";

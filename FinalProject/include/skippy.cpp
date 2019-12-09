@@ -126,7 +126,7 @@ void Skippy::insert(int key) {
     }
 }
 
-int Skippy::pinsert(int key) {
+ int Skippy::pinsert(int key) {
 //    int key = *(int *)k;
 
     // traversal node to find insert point
