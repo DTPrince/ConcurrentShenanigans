@@ -1,0 +1,97 @@
+           1 2 4 5 6 8 9 14 29 67 72 87 92
+1
+6
+9
+2
+9
+1
+6
+2
+5
+8
+2
+1
+67
+9
+4
+87
+29
+72
+92
+14
+
+ 
+
+Level: 0 : 1 2 4 5 6 8 9 14 29 67 72 87 92 
+Level: 1 : 1 4 5 8 14 67 
+Level: 2 : 5 
+In range {2,12}: 2 4 5 6 8 9 
+In range {6,28}: 6 8 9 14 
+
+Level: 0 : 1 2 4 5 6 8 9 14 29 67 72 87 92 
+Level: 1 : 4 5 8 9 14 67 
+Level: 2 : 5 
+In range {2,12}: 2 4 5 6 8 9 
+In range {6,28}: 6 8 9 14 
+
+Level: 0 : 1 2 4 5 6 8 9 14 29 67 72 87 92 
+Level: 1 : 1 4 8 9 14 67 
+Level: 2 : 8 
+In range {2,12}: 2 4 5 6 8 9 
+In range {6,28}: 6 8 9 14 
+
+Level: 0 : 1 2 6 8 9 14 29 67 72 87 92 
+Level: 1 : 1 2 29 67 87 
+Level: 2 : 1 
+In range {2,12}: 2 6 8 9 
+In range {6,28}: 6 8 9 14 
+
+Level: 0 : 1 2 4 5 6 8 9 14 29 67 72 87 92 
+Level: 1 : 2 4 5 8 14 67 
+Level: 2 : 5 
+In range {2,12}: 2 4 5 6 8 9 
+In range {6,28}: 6 8 9 14 
+
+Level: 0 : 1 2 6 8 9 14 29 67 72 87 92 
+Level: 1 : 1 2 29 67 87 
+Level: 2 : 2 
+In range {2,12}: 2 6 8 9 
+In range {6,28}: 6 8 9 14 
+
+Skip list contents
+Level: 0 : 1 2 4 5 6 9 14 29 67 72 87 92 
+Level: 1 : 1 2 4 67 87 
+Level: 2 : 1 
+In range {2,12}: 2 4 5 6 9 
+In range {6,28}: 6 9 14 
+
+Skip list contents
+Level: 0 : 1 2 4 5 6 8 9 14 29 67 72 87 92 
+Level: 1 : 2 4 5 8 14 67 
+Level: 2 : 5 
+In range {2,12}: 2 4 5 6 8 9 
+In range {6,28}: 6 8 9 14 
+
+Level: 0 : 2 4 5 6 8 9 14 29 72 87 92 
+Level: 1 : 2 4 8 29 87 
+Level: 2 : 8 
+In range {2,12}: 2 4 5 6 8 9 
+In range {6,28}: 6 8 9 14 
+
+
+// no prange
+Level: 0 : 1 2 4 5 6 8 9 14 67 72 87 92 
+Level: 1 : 2 4 5 8 67 
+Level: 2 : 5 
+In range {2,12}: 2 4 5 6 8 9 
+
+Level: 0 : 1 2 4 5 6 8 9 14 29 67 72 87 92 
+Level: 1 : 2 4 5 8 14 67 
+Level: 2 : 5 
+In range {2,12}: 2 4 5 6 8 9 
+
+Level: 0 : 1 2 4 6 9 14 72 87 92 
+Level: 1 : 2 4 72 87 92 
+Level: 2 : 4 
+In range {2,12}: 2 4 6 9 
+

@@ -37,6 +37,8 @@ public:
     // levels of "express lanes" above level 0
     int max_level;
     int c_level;    // current level
+    int stored;
+    std::atomic_flag store_flag = ATOMIC_FLAG_INIT;
 
     // Fraction of nodes that also share a higher-level
     // node.

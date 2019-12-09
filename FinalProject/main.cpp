@@ -15,6 +15,9 @@ static struct timespec start, end;
 void global_init() { threads = static_cast<pthread_t*>(malloc(NUM_THREADS * sizeof(pthread_t))); }
 void global_cleanup() { free(threads); }
 
+std::vector<int> test;
+
+
 // Small structure for passing information around in threads
 typedef struct {
     Skippy *skip;
@@ -23,19 +26,24 @@ typedef struct {
     int high = -1;
 } ThreadCommunication;
 
+Skippy skippy(3, 0.5);
+ThreadCommunication tc;
+
 // Forwarder to call class function without doing the reference/dereference void * bullshit
 // as it was cleaner than every other implementation aside from ripping up all my code
 // and restructuring the entire class. Which wasn't even guaranteed to work
 static void * pinsert_helper(void * arg){
-    ThreadCommunication *tc = (ThreadCommunication *)arg;
-    tc->skip->pinsert(tc->key);
+    int * key = (int*)arg;
+    int keyval = *key;
+//    test.push_back(keyval);
+    tc.skip->pinsert(keyval);
     pthread_exit(nullptr);
 }
 
 static void * pget_range_helper(void * arg) {
     ThreadCommunication *tc = (ThreadCommunication *)arg;
     std::vector<int> * range_vec = tc->skip->pget_range(tc->low, tc->high);
-    pthread_exit(nullptr);
+    pthread_exit(range_vec);
 }
 
 int main(int argc, char* argv[]) {
@@ -132,23 +140,61 @@ int main(int argc, char* argv[]) {
     // --- Insert items ---
     global_init();
 
-    Skippy skippy(3, 0.5);
-    ThreadCommunication tc;
-    tc.skip = &skippy;
-
     // Sequential insert only
 //    for (auto i = file_contents.begin(); i < file_contents.end(); i++) {
 //        skippy.insert(*i);
 //    }
 
-
+    tc.skip = &skippy;
     int ret = -1;
-    for (int i = 0; i < file_contents.size(); i++) {
-        tc.key = file_contents[i];
-        ret = pthread_create(&threads[i], nullptr, &pinsert_helper, &tc);
-    }
-    for (int i = 0; i < file_contents.size(); i++) {
+
+    ThreadCommunication tc0;
+    tc0.skip = &skippy;
+    tc0.key = 0;
+    ThreadCommunication tc1;
+    tc1.skip = &skippy;
+    tc1.key = 1;
+    ThreadCommunication tc2;
+    tc2.skip = &skippy;
+    tc2.key = 2;
+    ThreadCommunication tc3;
+    tc3.skip = &skippy;
+    tc3.key = 3;
+    ThreadCommunication tc4;
+    tc4.skip = &skippy;
+    tc4.key = 4;
+    ThreadCommunication tc5;
+    tc5.skip = &skippy;
+    tc5.key = 5;
+    ThreadCommunication tc6;
+    tc6.skip = &skippy;
+    tc6.key = 6;
+    ThreadCommunication tc7;
+    tc7.skip = &skippy;
+    tc7.key = 7;
+    ThreadCommunication tc8;
+    tc8.skip = &skippy;
+    tc8.key = 8;
+    ThreadCommunication tc9;
+    tc9.skip = &skippy;
+    tc9.key = 9;
+
+    ret = pthread_create(&threads[0], nullptr, &pinsert_helper, &tc0.key);
+    ret = pthread_create(&threads[1], nullptr, &pinsert_helper, &tc1.key);
+    ret = pthread_create(&threads[2], nullptr, &pinsert_helper, &tc2.key);
+    ret = pthread_create(&threads[3], nullptr, &pinsert_helper, &tc3.key);
+    ret = pthread_create(&threads[4], nullptr, &pinsert_helper, &tc4.key);
+    ret = pthread_create(&threads[5], nullptr, &pinsert_helper, &tc5.key);
+    ret = pthread_create(&threads[6], nullptr, &pinsert_helper, &tc6.key);
+    ret = pthread_create(&threads[7], nullptr, &pinsert_helper, &tc7.key);
+    ret = pthread_create(&threads[8], nullptr, &pinsert_helper, &tc8.key);
+    ret = pthread_create(&threads[9], nullptr, &pinsert_helper, &tc9.key);
+
+    for (int i = 0; i < 10; i++) {
         ret = pthread_join(threads[i], nullptr);
+        if (ret != 0){
+            std::cout << "Error on thread " << i << " join.\n";
+        }
     }
 
     global_cleanup();
@@ -156,12 +202,28 @@ int main(int argc, char* argv[]) {
     // Print. Or not.
     skippy.display();
 
-    std::vector<int> * r = skippy.get_range(2, 12);
-    std::cout << "In range {2,12}: ";
-    for (auto i = r->begin(); i < r->end(); i++){
+    std::cout << "Test vec:\n";
+    for (auto i = test.begin(); i< test.end(); i++){
         std::cout << *i << " ";
     }
+    std::cout << "\n";
+//    std::vector<int> * r = skippy.get_range(2, 12);
+//
+//    std::cout << "In range {2,12}: ";
+//    for (auto i = r->begin(); i < r->end(); i++){
+//        std::cout << *i << " ";
+//    }
+//    std::cout << std::endl;
 
+//    tc.low = 6;
+//    tc.high = 28;
+//    auto t1 = pthread_create(&threads[0], nullptr, &pget_range_helper, &tc);
+//    std::vector<int> * r2;
+//    auto temp = pthread_join(threads[0], (void **)&r2);
+//    std::cout << "In range {6,28}: ";
+//    for (auto i = r2->begin(); i < r2->end(); i++){
+//        std::cout << *i << " ";
+//    }
 
     return 0;
 }

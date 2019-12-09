@@ -19,6 +19,7 @@ Skippy::Skippy(int mlevel, float p) {
     max_level = mlevel;
     portion = p;
     c_level = 0;
+    stored = 0;
 
     head = new SLNode(-1, max_level);    // assign -1 for flagging though
                                                 // at the moment there is no need
@@ -133,7 +134,7 @@ int Skippy::pinsert(int key) {
     // Tracks previous node to manage hand-over-hand locking
     SLNode * previous = nullptr;
     // acquire lock or stall thread while waiting
-    while (crawler->aflag.test_and_set()) {}
+    while (crawler->aflag.test_and_set(std::memory_order_seq_cst)) {}
 
     // must be max level because there is
     // no promise that we won't reach the
@@ -152,25 +153,25 @@ int Skippy::pinsert(int key) {
             // update 'forwarding' pointers as search progresses
 
             // clear previous flag
+            while (crawler->next[i]->aflag.test_and_set(std::memory_order_seq_cst)) {}
             if (previous != nullptr)
-                previous->aflag.clear();
+                previous->aflag.clear(std::memory_order_seq_cst);
             previous = crawler;
             crawler = crawler->next[i];
             // acquire next flag
-            while (crawler->aflag.test_and_set()) {}
+//            while (crawler->aflag.test_and_set()) {}
         }
         stitcher[i] = crawler;
     }
 
     // Shifting crawler forward after finding node means it can now
     // acceptably be nullptr and is no longer safe to reference without check
+    if (crawler->next[0] != nullptr)
+        while (crawler->next[0]->aflag.test_and_set(std::memory_order_seq_cst)) {}
     if (previous != nullptr)
-        previous->aflag.clear();
+        previous->aflag.clear(std::memory_order_seq_cst);
     previous = crawler;
     crawler = crawler->next[0];
-    // acquire next flag
-    if (crawler != nullptr)
-        while (crawler->aflag.test_and_set()) {}
 
     // Here check if (first cond) we are at the end OR (second cond) the key has already been inserted
     if (crawler == nullptr || crawler->key != key){
@@ -178,16 +179,22 @@ int Skippy::pinsert(int key) {
 
         // If the random level is a greater depth than the current depth
         // then the head needs to be updated to point to the new node
+        // **This oonly happens when a new level is added. So the new node
+        // will by default be the first link from head on the new level(s)
         if (rand_level > c_level){
+//            while(head->aflag.test_and_set()){}
             for (int i = c_level + 1; i < rand_level + 1; i++){
                 stitcher[i] = head;
             }
             // There is a new level depth now.
             c_level = rand_level;
         }
-
         // Now that the structure has been massaged into shape, create new node proper
         SLNode * i_node = createSLNode(key, rand_level);
+        // I dont think a world exists where this would fail to acquire the lock on the
+        // first try but I am putting it here in case I need to modify the code in a
+        // way that lets something else acquire it.
+        while (i_node->aflag.test_and_set(std::memory_order_seq_cst)) {}
 
         // insert by adjusting surrounding pointers.
         // recall that 'stitcher' was left in the position
@@ -197,15 +204,21 @@ int Skippy::pinsert(int key) {
             i_node->next[i] = stitcher[i]->next[i];
             stitcher[i]->next[i] = i_node;
         }
+
+        // Now release.
+        // Shares some overlap with crawler release at end
+//        head->aflag.clear();
+//        while (store_flag.test_and_set(std::memory_order_seq_cst)){}
+//        stored++;
+//        store_flag.clear(std::memory_order_seq_cst);
+        i_node->aflag.clear(std::memory_order_seq_cst);
     }
 
     // Make sure no locks are held on release.
     // This has to be called here in case of fisrt insert/append to end
-//    if (previous != nullptr)
-    previous->aflag.clear();
     if (crawler != nullptr)
-        crawler->aflag.clear();
-
+        crawler->aflag.clear(std::memory_order_seq_cst);
+    previous->aflag.clear(std::memory_order_seq_cst);
     return 0;
 }
 
@@ -226,7 +239,7 @@ std::vector<int>* Skippy::get_range(int lower, int upper) {
     range->reserve(upper - lower);
 
     // crawler is now below 'lower' on thew base row. Just accumulate until next[0]->key > upper
-    while (crawler->key < upper || crawler->next == nullptr){
+    while (crawler->key <= upper || crawler->next == nullptr){
         range->push_back(crawler->key);
         crawler = crawler->next[0];
     }
@@ -244,24 +257,61 @@ std::vector<int>* Skippy::get_range(int lower, int upper) {
 std::vector<int>* Skippy::pget_range(int lower, int upper) {
 
     SLNode * crawler = head;
+    // Tracks previous node to manage hand-over-hand locking
+    SLNode * previous = nullptr;
+    // acquire lock or stall thread while waiting
+    while (crawler->aflag.test_and_set()) {}
 
+    // Now to find the location desired to insert between or at the end.
+    // Inserting first node is handled as inserting on end of head, not as
+    // a replacement for it.
     for (int i = c_level; i >= 0; i--) {
         while (crawler->next[i] != nullptr &&
                crawler->next[i]->key < lower) {
+            // update 'forwarding' pointers as search progresses
+
+            // clear previous flag
+            if (previous != nullptr)
+                previous->aflag.clear();
+            previous = crawler;
             crawler = crawler->next[i];
+            // acquire next flag
+            while (crawler->aflag.test_and_set()) {}
         }
     }
+
+    // Shifting crawler forward after finding node means it can now
+    // acceptably be nullptr and is no longer safe to reference without check
+    if (previous != nullptr)
+        previous->aflag.clear();
+    previous = crawler;
     crawler = crawler->next[0];
+    // acquire next flag
+    if (crawler != nullptr)
+        while (crawler->aflag.test_and_set()) {}
+
     auto * range = new std::vector<int>;
     range->reserve(upper - lower);
 
     // crawler is now below 'lower' on thew base row. Just accumulate until next[0]->key > upper
-    while (crawler->key < upper || crawler->next == nullptr){
+    while (crawler->key <= upper || crawler->next == nullptr){
         range->push_back(crawler->key);
+
+        // clear previous flag
+        if (previous != nullptr)
+            previous->aflag.clear();
+        previous = crawler;
         crawler = crawler->next[0];
+        // acquire next flag
+        while (crawler->aflag.test_and_set()) {}
     }
 
-    pthread_exit((void *)range);
+//    if (previous != nullptr)  // linter: condition always true
+    previous->aflag.clear();
+//    if (crawler != nullptr)   // linter: condition always true
+    crawler->aflag.clear();
+
+    return range;
 }
 
 // Just iterate over list but hit every node from bottom up
