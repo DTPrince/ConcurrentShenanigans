@@ -273,8 +273,8 @@ namespace cxxopts
 		const std::string LQUOTE("\'");
 		const std::string RQUOTE("\'");
 #else
-		const std::string LQUOTE("‘");
-		const std::string RQUOTE("’");
+		const std::string LQUOTE("ï¿½");
+		const std::string RQUOTE("ï¿½");
 #endif
 	}
 
@@ -1097,7 +1097,6 @@ namespace cxxopts
 			return m_count;
 		}
 
-		// TODO: maybe default options should count towards the number of arguments
 		bool
 			has_default() const noexcept
 		{

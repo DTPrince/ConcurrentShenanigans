@@ -1,0 +1,1 @@
+perf stat -e L1-dcache-store,L1-dcache-load,L1-dcache-prefetches,branch-instructions,branch-misses,branch-loads,branch-loadmisses ./skiplist /input/input.txt -t 100

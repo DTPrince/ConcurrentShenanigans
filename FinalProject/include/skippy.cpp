@@ -135,7 +135,7 @@ void Skippy::insert(int key) {
     }
 }
 
- int Skippy::pinsert(int &key) {
+ int Skippy::pinsert(int key) {
     // traversal node to find insert point
     SLNode * crawler = head;
     // Tracks previous node to manage hand-over-hand locking
@@ -274,7 +274,6 @@ std::vector<int>* Skippy::get_range(int lower, int upper) {
     return range;
 }
 
-// TODO: add actual locks to this. *Should* be easier than insert, though similar
 // There is an argument to be made to lock the whole chain of values while accumulating
 // them but I do not think the benefits outweigh the cost. There would never be a
 // promise that the returned range is valid for any time past when it is returned.
@@ -387,8 +386,8 @@ SLNode * Skippy::pget(int key) {
     previous = crawler;
     crawler = crawler->next[0];
 
-    previous->aflag.clear();
-    crawler->aflag.clear();
+    previous->aflag.clear(std::memory_order_seq_cst);
+    crawler->aflag.clear(std::memory_order_seq_cst);
 
     if (crawler->key == key)
         return crawler;

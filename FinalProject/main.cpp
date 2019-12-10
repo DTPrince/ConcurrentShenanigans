@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <string>
 #include <fstream>
+#include <random>
 
 #include <sys/types.h>
 
@@ -11,7 +12,7 @@
 
 static pthread_t* threads;
 static int NUM_THREADS = 0;
-//static struct timespec start, end;
+static struct timespec t_start, t_end;
 
 // Threads initialize and cleanup
 void global_init() { threads = static_cast<pthread_t*>(malloc(NUM_THREADS * sizeof(pthread_t))); }
@@ -23,7 +24,7 @@ typedef struct {
     int high = -1;
 } ThreadCommunication;
 
-Skippy skippy(3, 0.5);
+Skippy skippy(3, 0.3);
 ThreadCommunication tc;
 int data_per_thread = 1;
 
@@ -31,10 +32,6 @@ int data_per_thread = 1;
 // implementation aside from ripping up all my code and restructuring
 // the entire class. Which wasn't even guaranteed to work
 static void * pinsert_helper(void * arg) {
-//    std::vector<int> * keys = static_cast<vector<int> *> (arg);
-//    for (auto i = keys->begin(); i < keys->end(); i++){
-//        skippy.pinsert(*i);
-//    }
     int * keys = static_cast<int *>(arg);
     for (int i = 0; i < data_per_thread; i++){
         skippy.pinsert(keys[i]);
@@ -59,6 +56,7 @@ int main(int argc, char* argv[]) {
                                       " fine-grained hand-over-hand locking");
 
     std::string input, output;
+    //./input/input.txt -t 100
 
     options.add_options()(
             "n, name", "My name (for grading purposes)", cxxopts::value<bool>())(
@@ -98,10 +96,12 @@ int main(int argc, char* argv[]) {
                 printf("Error: Too many threads\n");
                 return (-1);
             }
+        } else if (NUM_THREADS > 50) {
+            NUM_THREADS = 50;
         } else
             NUM_THREADS = 5;
     }
-        // Catch unknown options and close nicely
+    // Catch unknown options and close nicely
     catch (std::exception& e) {
         std::cout << e.what() << std::endl;
         return -1;
@@ -160,6 +160,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    clock_gettime(CLOCK_MONOTONIC, &t_start);
     for (int i = 0; i < NUM_THREADS; i++) {
         static int tid = 0;
         int ret = pthread_create(&threads[tid], nullptr, &pinsert_helper, &insert[i]);
@@ -171,61 +172,82 @@ int main(int argc, char* argv[]) {
         int ret = pthread_join(threads[tid], nullptr);
         tid++;
     }
-
+    clock_gettime(CLOCK_MONOTONIC, &t_end);
+    unsigned long long t_insert = (t_end.tv_sec - t_start.tv_sec) * 1000000000 + (t_end.tv_nsec - t_start.tv_nsec);
     // Print. Or not.
     skippy.display();
 
 
     // Ranging tests:
-    std::vector<int> * r = skippy.get_range(2, 12);
-
-    std::cout << "In range {2,12}: ";
-    for (auto i = r->begin(); i < r->end(); i++){
-        std::cout << *i << " ";
-    }
-    std::cout << std::endl;
+//    std::vector<int> * r = skippy.get_range(2, 12);
+//
+//    std::cout << "In range {2,12}: ";
+//    for (auto i = r->begin(); i < r->end(); i++){
+//        std::cout << *i << " ";
+//    }
+//    std::cout << std::endl;
 
     tc.low = 6;
     tc.high = 45;
+
+    clock_gettime(CLOCK_MONOTONIC, &t_start);
     auto ret = pthread_create(&threads[0], nullptr, &pget_range_helper, &tc);
     if (ret)
         std::cout << "Thread creation error.\n";
     std::vector<int> * r2;
     auto retval = pthread_join(threads[0], (void **)&r2);
+    clock_gettime(CLOCK_MONOTONIC, &t_end);
     if (retval)
         std::cout << "Error joining thread\n";
+
+    unsigned long long t_range = (t_end.tv_sec - t_start.tv_sec) * 1000000000 + (t_end.tv_nsec - t_start.tv_nsec);
+
     std::cout << "In range {6,45}: ";
     for (auto i = r2->begin(); i < r2->end(); i++)
         std::cout << *i << " ";
-
     std::cout << std::endl;
-
 
     // Get tests:
     // choosing 36 here because I know its in my test data
-    SLNode * gottee = skippy.pget(36);
-    if (gottee->key != -1){
-        std::cout << "Get {36} Success.\n";
-    }
-    else
-        std::cout << "Key not present in list. Returned {" << gottee->key << "}\n";
+//    SLNode * gottee = skippy.pget(36);
+//    if (gottee->key == 36){
+//        std::cout << "Get {36} Success.\n";
+//    }
+//    else
+//        std::cout << "Key not present in list. Returned {" << gottee->key << "}\n";
 
-    int search_val = 36;
+    // This is decidedly not random. But thats fine, its not actually important
+    std::default_random_engine generator;
+    std::uniform_int_distribution<int> distribution(0,file_contents.size());
+    int rnum = distribution(generator);
+    int search_val = file_contents[rnum];
+    clock_gettime(CLOCK_MONOTONIC, &t_end);
     auto gc_ret = pthread_create(&threads[0], nullptr, &pget_helper, &search_val);
     if (gc_ret)
         std::cout << "Thread creation error.\n";
 
     SLNode * get_node;
     auto gj_ret = pthread_join(threads[0], (void **)&get_node);
+    clock_gettime(CLOCK_MONOTONIC, &t_end);
     if (gj_ret)
         std::cout << "Thread creation error.\n";
 
+    unsigned long long t_get = (t_end.tv_sec - t_start.tv_sec) * 1000000000 + (t_end.tv_nsec - t_start.tv_nsec);
+
     // check
-    if (get_node->key != -1){
-        std::cout << "Get {36} Success but in a new thread.\n";
+    if (get_node->key == search_val){
+        std::cout << "Get {" << search_val << "} Success but in a new thread.\n";
     }
     else
         std::cout << "Key not present in list. Returned {" << get_node->key << "}\n";
+
+    // Timing prints
+    std::cout << std::endl;
+    std::cout << "Skip list inserted in approximately " << t_insert << " ns.\n";
+    std::cout << "Skip list fetched range in approximately " << t_range << " ns.\n";
+    std::cout << "Skip list returned {" << search_val << "} in approximately " << t_get << " ns.\n";
+
+    // Benchmarks
 
     global_cleanup();
 
