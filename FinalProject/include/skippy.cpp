@@ -3,6 +3,7 @@
 //
 
 #include "skippy.h"
+#include "cpu_relax.hpp"
 #include <iostream>
 
 SLNode::SLNode(int k, int lvl) {
@@ -15,6 +16,10 @@ SLNode::SLNode(int k, int lvl) {
     }
 }
 
+SLNode::~SLNode(){
+    delete (next);
+}
+
 Skippy::Skippy(int mlevel, float p) {
     max_level = mlevel;
     portion = p;
@@ -23,6 +28,10 @@ Skippy::Skippy(int mlevel, float p) {
 
     head = new SLNode(-1, max_level);    // assign -1 for flagging though
                                                 // at the moment there is no need
+}
+
+Skippy::~Skippy(){
+    delete (head);
 }
 
 /*
@@ -126,15 +135,13 @@ void Skippy::insert(int key) {
     }
 }
 
- int Skippy::pinsert(int key) {
-//    int key = *(int *)k;
-
+ int Skippy::pinsert(int &key) {
     // traversal node to find insert point
     SLNode * crawler = head;
     // Tracks previous node to manage hand-over-hand locking
     SLNode * previous = nullptr;
     // acquire lock or stall thread while waiting
-    while (crawler->aflag.test_and_set(std::memory_order_seq_cst)) {}
+    while (crawler->aflag.test_and_set(std::memory_order_acquire)) {cpu_relax();}
 
     // must be max level because there is
     // no promise that we won't reach the
@@ -153,25 +160,29 @@ void Skippy::insert(int key) {
             // update 'forwarding' pointers as search progresses
 
             // clear previous flag
-            while (crawler->next[i]->aflag.test_and_set(std::memory_order_seq_cst)) {}
             if (previous != nullptr)
-                previous->aflag.clear(std::memory_order_seq_cst);
+                previous->aflag.clear(std::memory_order_release);
             previous = crawler;
             crawler = crawler->next[i];
             // acquire next flag
-//            while (crawler->aflag.test_and_set()) {}
+            while (crawler->aflag.test_and_set(std::memory_order_acquire)) {cpu_relax();}
         }
         stitcher[i] = crawler;
+
     }
 
     // Shifting crawler forward after finding node means it can now
     // acceptably be nullptr and is no longer safe to reference without check
-    if (crawler->next[0] != nullptr)
-        while (crawler->next[0]->aflag.test_and_set(std::memory_order_seq_cst)) {}
-    if (previous != nullptr)
-        previous->aflag.clear(std::memory_order_seq_cst);
+    for (int i = 0; i < max_level + 1; i++){
+        if (previous != nullptr && previous != stitcher[i])
+            previous->aflag.clear(std::memory_order_release);
+    }
     previous = crawler;
     crawler = crawler->next[0];
+     for (int i = 0; i < max_level + 1; i++){
+         if (crawler != nullptr && crawler != stitcher[i])
+             crawler->aflag.clear(std::memory_order_release);
+     }
 
     // Here check if (first cond) we are at the end OR (second cond) the key has already been inserted
     if (crawler == nullptr || crawler->key != key){
@@ -181,44 +192,60 @@ void Skippy::insert(int key) {
         // then the head needs to be updated to point to the new node
         // **This oonly happens when a new level is added. So the new node
         // will by default be the first link from head on the new level(s)
+        bool level_was_increased = false;
         if (rand_level > c_level){
-//            while(head->aflag.test_and_set()){}
+            // If the level is increasing then the head needs to be acquired
+            // as the new level forwarding fields will need to be updated.
+            // And other threads can trash this forwarding if not locked.
+            // Ask me how I know. (or just witness the cursing in my commits)
+            if (crawler != head && previous != head)
+                while (head->aflag.test_and_set(std::memory_order_acquire)){cpu_relax();}
             for (int i = c_level + 1; i < rand_level + 1; i++){
                 stitcher[i] = head;
             }
             // There is a new level depth now.
             c_level = rand_level;
+            level_was_increased = true;
         }
         // Now that the structure has been massaged into shape, create new node proper
         SLNode * i_node = createSLNode(key, rand_level);
         // I dont think a world exists where this would fail to acquire the lock on the
         // first try but I am putting it here in case I need to modify the code in a
         // way that lets something else acquire it.
-        while (i_node->aflag.test_and_set(std::memory_order_seq_cst)) {}
+        while (i_node->aflag.test_and_set(std::memory_order_acquire)) {cpu_relax();}
 
         // insert by adjusting surrounding pointers.
         // recall that 'stitcher' was left in the position
         // just prior to insert point after accumulating
-        // all previous pointers.
+        // all previous pointers on upper levels.
         for (int i = 0; i <= rand_level; i++){
+            // These checks are really ugly but I have to ensure that this thread
+            // has not already acquired the lock, otherwise it is guaranteed deadlock
+            // stitcher[i] was already acquired earlier
+            if (crawler != stitcher[i]->next[i] && previous != stitcher[i]->next[i] && stitcher[i] != head && stitcher[i]->next[i] != nullptr) {
+                while (stitcher[i]->next[i]->aflag.test_and_set(std::memory_order_acquire)) {cpu_relax();}
+            }
             i_node->next[i] = stitcher[i]->next[i];
+            if (crawler != stitcher[i]->next[i] && previous != stitcher[i]->next[i] && stitcher[i] != head && stitcher[i]->next[i] != nullptr){
+                stitcher[i]->next[i]->aflag.clear(std::memory_order_release);
+            }
             stitcher[i]->next[i] = i_node;
         }
+        // check if we locked head (due to level increase)
+        if (level_was_increased && crawler != head && previous != head)
+            head->aflag.clear(std::memory_order_release);
 
         // Now release.
         // Shares some overlap with crawler release at end
-//        head->aflag.clear();
-//        while (store_flag.test_and_set(std::memory_order_seq_cst)){}
-//        stored++;
-//        store_flag.clear(std::memory_order_seq_cst);
-        i_node->aflag.clear(std::memory_order_seq_cst);
+        i_node->aflag.clear(std::memory_order_release);
     }
 
     // Make sure no locks are held on release.
     // This has to be called here in case of fisrt insert/append to end
-    if (crawler != nullptr)
-        crawler->aflag.clear(std::memory_order_seq_cst);
-    previous->aflag.clear(std::memory_order_seq_cst);
+    if (previous != nullptr)
+         previous->aflag.clear(std::memory_order_release);
+     if (crawler != nullptr)
+        crawler->aflag.clear(std::memory_order_release);
     return 0;
 }
 
@@ -260,7 +287,7 @@ std::vector<int>* Skippy::pget_range(int lower, int upper) {
     // Tracks previous node to manage hand-over-hand locking
     SLNode * previous = nullptr;
     // acquire lock or stall thread while waiting
-    while (crawler->aflag.test_and_set()) {}
+    while (crawler->aflag.test_and_set(std::memory_order_acquire)) { cpu_relax(); }
 
     // Now to find the location desired to insert between or at the end.
     // Inserting first node is handled as inserting on end of head, not as
@@ -272,23 +299,23 @@ std::vector<int>* Skippy::pget_range(int lower, int upper) {
 
             // clear previous flag
             if (previous != nullptr)
-                previous->aflag.clear();
+                previous->aflag.clear(std::memory_order_release);
             previous = crawler;
             crawler = crawler->next[i];
             // acquire next flag
-            while (crawler->aflag.test_and_set()) {}
+            while (crawler->aflag.test_and_set(std::memory_order_acquire)) { cpu_relax(); }
         }
     }
 
     // Shifting crawler forward after finding node means it can now
     // acceptably be nullptr and is no longer safe to reference without check
     if (previous != nullptr)
-        previous->aflag.clear();
+        previous->aflag.clear(std::memory_order_release);
     previous = crawler;
     crawler = crawler->next[0];
     // acquire next flag
     if (crawler != nullptr)
-        while (crawler->aflag.test_and_set()) {}
+        while (crawler->aflag.test_and_set(std::memory_order_acquire)) { cpu_relax(); }
 
     auto * range = new std::vector<int>;
     range->reserve(upper - lower);
@@ -299,17 +326,17 @@ std::vector<int>* Skippy::pget_range(int lower, int upper) {
 
         // clear previous flag
         if (previous != nullptr)
-            previous->aflag.clear();
+            previous->aflag.clear(std::memory_order_release);
         previous = crawler;
         crawler = crawler->next[0];
         // acquire next flag
-        while (crawler->aflag.test_and_set()) {}
+        while (crawler->aflag.test_and_set(std::memory_order_acquire)) { cpu_relax(); }
     }
 
 //    if (previous != nullptr)  // linter: condition always true
-    previous->aflag.clear();
+    previous->aflag.clear(std::memory_order_release);
 //    if (crawler != nullptr)   // linter: condition always true
-    crawler->aflag.clear();
+    crawler->aflag.clear(std::memory_order_release);
 
     return range;
 }
@@ -326,4 +353,45 @@ void Skippy::display() {
         }
         std::cout << std::endl;
     }
+}
+
+SLNode * Skippy::pget(int key) {
+    SLNode * crawler = head;
+    // Tracks previous node to manage hand-over-hand locking
+    SLNode * previous = nullptr;
+    // acquire lock or stall thread while waiting
+    while (crawler->aflag.test_and_set(std::memory_order_acquire)) { cpu_relax(); }
+
+    // Now to find the location desired to insert between or at the end.
+    // Inserting first node is handled as inserting on end of head, not as
+    // a replacement for it.
+    for (int i = c_level; i >= 0; i--) {
+        while (crawler->next[i] != nullptr &&
+               crawler->next[i]->key < key) {
+            // update 'forwarding' pointers as search progresses
+
+            // clear previous flag
+            if (previous != nullptr)
+                previous->aflag.clear(std::memory_order_release);
+            previous = crawler;
+            crawler = crawler->next[i];
+            // acquire next flag
+            while (crawler->aflag.test_and_set(std::memory_order_acquire)) { cpu_relax(); }
+        }
+    }
+
+    // Shifting crawler forward after finding node means it can now
+    // acceptably be nullptr and is no longer safe to reference without check
+    if (previous != nullptr)
+        previous->aflag.clear(std::memory_order_release);
+    previous = crawler;
+    crawler = crawler->next[0];
+
+    previous->aflag.clear();
+    crawler->aflag.clear();
+
+    if (crawler->key == key)
+        return crawler;
+    else
+        return head;    // Check against head (either memory or key) to check invalid.
 }

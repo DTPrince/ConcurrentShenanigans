@@ -30,6 +30,7 @@ public:
     // Allow 8 readers or something
 
     SLNode(int, int);
+    ~SLNode();
 };
 
 class Skippy {
@@ -50,12 +51,13 @@ public:
 
     void insert(int);
     std::vector<int> * get_range(int, int);
-    int pinsert(int);
+    int pinsert(int&);
     void * tpinsert(void *);
 
     std::vector<int>* pget_range(int, int);
 
-    SLNode * get(int);
+//    SLNode * get(int);
+    SLNode * pget(int);
 
     int get_randomLevel();
 
@@ -63,6 +65,7 @@ public:
 
     Skippy(int, float); // max level and fraction of elements that
                         // share an upper level
+    ~Skippy();
 };
 
 /*

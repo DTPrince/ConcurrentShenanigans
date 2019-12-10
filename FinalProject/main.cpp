@@ -5,51 +5,53 @@
 #include <fstream>
 
 #include <sys/types.h>
-#include <syscall.h>
-#include <unistd.h>
 
 #include "include/cxxopts.hpp"
 #include "include/skippy.h"
 
 static pthread_t* threads;
 static int NUM_THREADS = 0;
-static struct timespec start, end;
+//static struct timespec start, end;
 
 // Threads initialize and cleanup
 void global_init() { threads = static_cast<pthread_t*>(malloc(NUM_THREADS * sizeof(pthread_t))); }
 void global_cleanup() { free(threads); }
 
-std::vector<int> test;
-
-
 // Small structure for passing information around in threads
 typedef struct {
-    Skippy *skip;
-    int key;
     int low = -1;
     int high = -1;
 } ThreadCommunication;
 
 Skippy skippy(3, 0.5);
 ThreadCommunication tc;
+int data_per_thread = 1;
 
-// Forwarder to call class function without doing the reference/dereference void * bullshit
-// as it was cleaner than every other implementation aside from ripping up all my code
-// and restructuring the entire class. Which wasn't even guaranteed to work
-static void * pinsert_helper(void * arg){
-    pid_t x = syscall(__NR_gettid);
-
-    int * key = (int*)arg;
-    int keyval = *key;
-//    test.push_back(keyval);
-    tc.skip->pinsert(keyval);
+// Forwarder to call class function as it was cleaner than every other
+// implementation aside from ripping up all my code and restructuring
+// the entire class. Which wasn't even guaranteed to work
+static void * pinsert_helper(void * arg) {
+//    std::vector<int> * keys = static_cast<vector<int> *> (arg);
+//    for (auto i = keys->begin(); i < keys->end(); i++){
+//        skippy.pinsert(*i);
+//    }
+    int * keys = static_cast<int *>(arg);
+    for (int i = 0; i < data_per_thread; i++){
+        skippy.pinsert(keys[i]);
+    }
     pthread_exit(nullptr);
 }
 
 static void * pget_range_helper(void * arg) {
     ThreadCommunication *tc = (ThreadCommunication *)arg;
-    std::vector<int> * range_vec = tc->skip->pget_range(tc->low, tc->high);
+    std::vector<int> * range_vec = skippy.pget_range(tc->low, tc->high);
     pthread_exit(range_vec);
+}
+
+static void * pget_helper(void* arg) {
+    SLNode * result;
+    result = skippy.pget(*static_cast<int*>(arg));
+    pthread_exit(result);
 }
 
 int main(int argc, char* argv[]) {
@@ -61,11 +63,9 @@ int main(int argc, char* argv[]) {
     options.add_options()(
             "n, name", "My name (for grading purposes)", cxxopts::value<bool>())(
             "i, input", "input file name", cxxopts::value<std::string>(), "FILE")(
-            "o, output", "Output file name", cxxopts::value<std::string>(), "FILE")(
             "t, threads", "Number of threads to be used", cxxopts::value<int>(), "NUM_THREADS")(
             "h, help", "Display help options");
 
-    std::string ofile = "";
     std::string ifile = "";
 
     // --- Opt parse block ---
@@ -81,13 +81,6 @@ int main(int argc, char* argv[]) {
         if (result.count("name")) {
             std::cout << "Derek Prince" << std::endl;
             return 0;
-        }
-
-        // Output file name
-        if (result.count("o")) {
-            ofile = result["o"].as<std::string>();
-        } else { // default name if none given
-            ofile = "output.txt";
         }
 
         // Input file name
@@ -151,91 +144,90 @@ int main(int argc, char* argv[]) {
 //        skippy.insert(*i);
 //    }
 
-    tc.skip = &skippy;
-    int ret = -1;
+    data_per_thread = file_contents.size() / NUM_THREADS;
+//    std::vector<int> insert[NUM_THREADS];
+    // Super garbage way to handle arbitrary thread numbers
+    // Alternative is to just modify ThreadCommunications struct
+    // but that has its own downsides for something trivial
+    int insert[NUM_THREADS][data_per_thread];
 
-//    ThreadCommunication tc0;
-//    tc0.skip = &skippy;
-//    tc0.key = 0;
-//    ThreadCommunication tc1;
-//    tc1.skip = &skippy;
-//    tc1.key = 1;
-//    ThreadCommunication tc2;
-//    tc2.skip = &skippy;
-//    tc2.key = 2;
-//    ThreadCommunication tc3;
-//    tc3.skip = &skippy;
-//    tc3.key = 3;
-//    ThreadCommunication tc4;
-//    tc4.skip = &skippy;
-//    tc4.key = 4;
-//    ThreadCommunication tc5;
-//    tc5.skip = &skippy;
-//    tc5.key = 5;
-//    ThreadCommunication tc6;
-//    tc6.skip = &skippy;
-//    tc6.key = 6;
-//    ThreadCommunication tc7;
-//    tc7.skip = &skippy;
-//    tc7.key = 7;
-//    ThreadCommunication tc8;
-//    tc8.skip = &skippy;
-//    tc8.key = 8;
-//    ThreadCommunication tc9;
-//    tc9.skip = &skippy;
-//    tc9.key = 9;
-
-//    ret = pthread_create(&threads[0], nullptr, &pinsert_helper, &tc0.key);
-//    ret = pthread_create(&threads[1], nullptr, &pinsert_helper, &tc1.key);
-//    ret = pthread_create(&threads[2], nullptr, &pinsert_helper, &tc2.key);
-//    ret = pthread_create(&threads[3], nullptr, &pinsert_helper, &tc3.key);
-//    ret = pthread_create(&threads[4], nullptr, &pinsert_helper, &tc4.key);
-//    ret = pthread_create(&threads[5], nullptr, &pinsert_helper, &tc5.key);
-//    ret = pthread_create(&threads[6], nullptr, &pinsert_helper, &tc6.key);
-//    ret = pthread_create(&threads[7], nullptr, &pinsert_helper, &tc7.key);
-//    ret = pthread_create(&threads[8], nullptr, &pinsert_helper, &tc8.key);
-//    ret = pthread_create(&threads[9], nullptr, &pinsert_helper, &tc9.key);
-
-    int insert[NUM_THREADS];
-    int tid = 0;
-    for (auto i = file_contents.begin(); i < file_contents.end(); i++) {
-        insert[tid] = *i;
-        ret = pthread_create(&threads[tid], nullptr, &pinsert_helper, &insert[tid]);
-        if (ret != 0) {
-            std::cout << "Error on thread " << tid << " create.\n";
+    // Prep vectors for threads
+    // There are two cases here but I have condensed them into one for maximum bugs
+    // (Just kidding. I am no longer using vectors is all)
+    for (int i = 0; i < NUM_THREADS; i++){
+        for (int j = 0; j < data_per_thread; j++){
+            insert[i][j] = file_contents[i*data_per_thread + j];
         }
+    }
+
+    for (int i = 0; i < NUM_THREADS; i++) {
+        static int tid = 0;
+        int ret = pthread_create(&threads[tid], nullptr, &pinsert_helper, &insert[i]);
         tid++;
     }
 
-    for (int i = 0; i < 10; i++) {
-        ret = pthread_join(threads[i], nullptr);
-        if (ret != 0) {
-            std::cout << "Error on thread " << i << " join.\n";
-        }
+    for (int i = 0; i < NUM_THREADS; i++) {
+        static int tid = 0;
+        int ret = pthread_join(threads[tid], nullptr);
+        tid++;
     }
-
-    global_cleanup();
 
     // Print. Or not.
     skippy.display();
 
-//    std::vector<int> * r = skippy.get_range(2, 12);
-//
-//    std::cout << "In range {2,12}: ";
-//    for (auto i = r->begin(); i < r->end(); i++){
-//        std::cout << *i << " ";
-//    }
-//    std::cout << std::endl;
 
-//    tc.low = 6;
-//    tc.high = 28;
-//    auto t1 = pthread_create(&threads[0], nullptr, &pget_range_helper, &tc);
-//    std::vector<int> * r2;
-//    auto temp = pthread_join(threads[0], (void **)&r2);
-//    std::cout << "In range {6,28}: ";
-//    for (auto i = r2->begin(); i < r2->end(); i++){
-//        std::cout << *i << " ";
-//    }
+    // Ranging tests:
+    std::vector<int> * r = skippy.get_range(2, 12);
+
+    std::cout << "In range {2,12}: ";
+    for (auto i = r->begin(); i < r->end(); i++){
+        std::cout << *i << " ";
+    }
+    std::cout << std::endl;
+
+    tc.low = 6;
+    tc.high = 45;
+    auto ret = pthread_create(&threads[0], nullptr, &pget_range_helper, &tc);
+    if (ret)
+        std::cout << "Thread creation error.\n";
+    std::vector<int> * r2;
+    auto retval = pthread_join(threads[0], (void **)&r2);
+    if (retval)
+        std::cout << "Error joining thread\n";
+    std::cout << "In range {6,45}: ";
+    for (auto i = r2->begin(); i < r2->end(); i++)
+        std::cout << *i << " ";
+
+    std::cout << std::endl;
+
+
+    // Get tests:
+    // choosing 36 here because I know its in my test data
+    SLNode * gottee = skippy.pget(36);
+    if (gottee->key != -1){
+        std::cout << "Get {36} Success.\n";
+    }
+    else
+        std::cout << "Key not present in list. Returned {" << gottee->key << "}\n";
+
+    int search_val = 36;
+    auto gc_ret = pthread_create(&threads[0], nullptr, &pget_helper, &search_val);
+    if (gc_ret)
+        std::cout << "Thread creation error.\n";
+
+    SLNode * get_node;
+    auto gj_ret = pthread_join(threads[0], (void **)&get_node);
+    if (gj_ret)
+        std::cout << "Thread creation error.\n";
+
+    // check
+    if (get_node->key != -1){
+        std::cout << "Get {36} Success but in a new thread.\n";
+    }
+    else
+        std::cout << "Key not present in list. Returned {" << get_node->key << "}\n";
+
+    global_cleanup();
 
     return 0;
 }
